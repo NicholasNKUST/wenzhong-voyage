@@ -283,7 +283,7 @@ footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
 
 <section class="panel" id="fishSec">
   <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">
-    <h2 id="fishTitle">當季海洋生物</h2>
+    <h2 id="fishTitle">本月可能遇見的海洋生物</h2>
     <div class="legend"><span><span class="dot l2"></span> 盛產期</span><span><span class="dot l1"></span> 可見</span><span><span class="dot l0"></span> 少見</span></div>
   </div>
   <div class="fishcards" id="fishCards"></div>
@@ -717,8 +717,10 @@ function bindFish(){
   $('fishX').onclick=hideFish; $('fishBack').onclick=hideFish;
 }
 const CATS=['魚類','頭足類','蝦蟹類'];
+let fishMonth=-1;
+function curMonth(){return Number(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei',month:'numeric'}))-1;}
 function renderFish(){
-  const mi=Number(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei',month:'numeric'}))-1;
+  const mi=curMonth(); fishMonth=mi;
   $('fishTitle').textContent=(mi+1)+' 月可能遇見的海洋生物';
   const now=FISH.filter(x=>x[1][mi]>0).sort((a,b)=>CATS.indexOf(a[5])-CATS.indexOf(b[5])||b[1][mi]-a[1][mi]);
   $('fishCards').innerHTML=now.map(([n,l,d,k,la,c,o])=>`<div class="fish ${l[mi]===1?'l1':''}" data-k="${k}" tabindex="0" role="button" aria-label="${n} 圖鑑"><span class="cat">${c}</span><h3>${n}</h3><span class="sci">${o?o+' · ':''}<i>${la}</i></span><span class="lbl">${l[mi]===2?'盛產期':'可見'} · <span class="hint"></span></span><p>${d}</p><div class="more"><a href="${photoUrl(la)}" target="_blank" rel="noopener">看實際照片 ↗</a></div></div>`).join('');
@@ -728,6 +730,8 @@ function renderFish(){
   $('fishCal').innerHTML=t+'</tbody></table>';
 }
 renderFish(); bindFish(); render();
+setInterval(()=>{if(curMonth()!==fishMonth)renderFish();},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&curMonth()!==fishMonth)renderFish();});
 setInterval(render,600000);
 
 /* ---------- auto fetch ---------- */
