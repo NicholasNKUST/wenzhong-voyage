@@ -134,6 +134,7 @@ input[type=range]{width:100%;accent-color:var(--sulfur)}
 .cal tr.catrow td{text-align:left;padding:12px 0 4px;font-size:11px;letter-spacing:.12em;color:var(--muted);font-weight:700;border-bottom:1px solid var(--ink)}
 details#manualBox>summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
 details#manualBox[open]>summary{margin-bottom:10px}
+.lunar{color:var(--ink);font-weight:500}
 .banner{background:color-mix(in srgb,var(--sulfur) 18%,var(--paper));border:1px solid var(--sulfur);border-radius:6px;padding:10px 14px;font-size:13px}
 footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -209,7 +210,7 @@ footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">
       <h2>潮汐</h2><span class="lbl" id="tideState">—</span>
     </div>
-    <div class="row"><span>目前水位 <b id="tideNow">—</b></span><span>相對平均海平面（MSL），非港口潮高基準</span></div>
+    <div class="row"><span>目前水位 <b id="tideNow">—</b></span><span id="lunarTide" class="lunar"></span><span>相對平均海平面（MSL），非港口潮高基準</span></div>
     <div id="tideChart"><div class="empty">貼上海象資料後顯示 72 小時潮位曲線與滿潮、乾潮時間</div></div>
     <div class="tidebar" id="tideEvents"></div>
   </div>
@@ -321,7 +322,14 @@ const fmtH=d=>d.toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour:'2-digit
 const f=(v,n=1)=>v==null||isNaN(v)?'—':Number(v).toFixed(n);
 const svgNS='http://www.w3.org/2000/svg';
 
-function tick(){ $('clock').textContent='現在 '+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}); }
+/* ---------- lunar ---------- */
+let LF=null; try{LF=new Intl.DateTimeFormat('zh-TW-u-ca-chinese',{timeZone:'Asia/Taipei',year:'numeric',month:'long',day:'numeric'});}catch(e){}
+const LDN=['','初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+function lunar(d){ if(!LF) return null; try{const pt={};LF.formatToParts(d).forEach(x=>pt[x.type]=x.value);const n=parseInt(pt.day,10);if(!pt.month||!(n>=1&&n<=30))return null;return {y:pt.yearName||'',m:pt.month,n,day:LDN[n]};}catch(e){return null;} }
+function tideKind(n){ return (n<=3||(n>=15&&n<=18)||n>=29)?'大潮':((n>=7&&n<=9)||(n>=22&&n<=24))?'小潮':'中潮'; }
+function tick(){ const d=new Date(),L=lunar(d);
+  $('clock').textContent='現在 '+d.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+(L?' · 農曆'+(L.y?L.y+'年':'')+L.m+L.day:'');
+  const el=$('lunarTide'); if(el){ el.textContent=L?`農曆${L.m}${L.day} · ${tideKind(L.n)}（依月相推估）`:''; el.hidden=!L; } }
 tick(); setInterval(tick,30000);
 
 /* ---------- storage ---------- */
@@ -375,7 +383,7 @@ function drawTide(times,h,now){
   let d=new Date(ts[0]); d=tp(times[0].slice(0,10)+'T00:00');
   for(let k=0;k<6;k++){const a=d.getTime()+k*864e5; if(a>t1) break; const xa=X(Math.max(a,t0));
     s+=`<line x1="${xa}" x2="${xa}" y1="${pt}" y2="${H-pb}" stroke="var(--line)" stroke-dasharray="2 3"/>`;
-    const lab=new Date(a+12*3600e3); if(lab.getTime()>t0&&lab.getTime()<t1) s+=`<text x="${X(lab.getTime())}" y="${H-8}" text-anchor="middle">${lab.toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei',month:'numeric',day:'numeric',weekday:'short'})}</text>`;}
+    const lab=new Date(a+12*3600e3); if(lab.getTime()>t0&&lab.getTime()<t1){const LL=lunar(lab); s+=`<text x="${X(lab.getTime())}" y="${H-8}" text-anchor="middle">${lab.toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei',month:'numeric',day:'numeric',weekday:'short'})}${LL?' · '+LL.day:''}</text>`;}}
   // y grid
   const step=(y1-y0)>1.2?0.5:0.25;
   for(let v=Math.ceil(y0/step)*step;v<=y1;v+=step){s+=`<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="${Math.abs(v)<1e-9?1.2:.5}"/><text x="${pl-4}" y="${Y(v)+3}" text-anchor="end">${v.toFixed(2)}</text>`;}
