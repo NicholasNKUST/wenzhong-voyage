@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="文中號出航：石城漁港與龜山島海域的潮汐、海流、浪高、風、天氣與水溫，附即時動態地圖與當季海洋生物。">
+<meta name="author" content="Nicholas Li">
+<title>文中號出航</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;800&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+html{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}
+/* Layout: chart-table header with coordinates → tide band (wide) + current rose → four instrument tiles → 72h charts → monthly fish calendar → data intake */
+:root{
+  --bg:#EDF1F0; --paper:#F8FAF9; --ink:#0F2A32; --muted:#5A7177; --line:#C9D5D4;
+  --sea:#1F5C78; --milk:#3FA79B; --sulfur:#B08A12; --warn:#C0662A; --crit:#B23A3A; --ok:#2E8A5C;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-data:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B1A20; --paper:#11252D; --ink:#E3ECEB; --muted:#8FA6AA; --line:#24414A;
+  --sea:#6FB3D2; --milk:#5CCBBE; --sulfur:#E0BE4A; --warn:#E89257; --crit:#EE7A7A; --ok:#5CC48C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1A20; --paper:#11252D; --ink:#E3ECEB; --muted:#8FA6AA; --line:#24414A;
+  --sea:#6FB3D2; --milk:#5CCBBE; --sulfur:#E0BE4A; --warn:#E89257; --crit:#EE7A7A; --ok:#5CC48C; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+h1,h2{font-family:var(--f-display);text-wrap:balance;margin:0}
+h1{font-size:clamp(26px,4vw,36px);font-weight:800;letter-spacing:.02em}
+h2{font-size:18px;font-weight:600}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.num{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+a{color:var(--sea)}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:12px}
+.coords{font-family:var(--f-data);font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--paper)}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.pill.ok i{background:var(--ok)} .pill.warn i{background:var(--warn)} .pill.demo i{background:var(--sulfur)}
+.grid{display:grid;gap:18px}
+.g-top{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.g-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:900px){.g-top{grid-template-columns:1fr}.g-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.g-4{grid-template-columns:1fr}}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0;display:grid;gap:10px;align-content:start}
+.big{font-family:var(--f-data);font-size:34px;font-weight:600;line-height:1.1}
+.big small{font-size:14px;color:var(--muted);font-weight:400;margin-left:4px}
+.row{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.row b{color:var(--ink);font-weight:500;font-family:var(--f-data)}
+.state{display:inline-block;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:700;color:var(--paper);background:var(--muted);justify-self:start}
+.s-ok{background:var(--ok)} .s-warn{background:var(--warn)} .s-crit{background:var(--crit)}
+svg text{fill:var(--muted);font-family:var(--f-data);font-size:10px}
+.chart{width:100%;height:auto;display:block}
+.tidebar{display:flex;flex-wrap:wrap;gap:8px}
+.tide-ev{border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:12px;display:grid;gap:2px;min-width:92px}
+.tide-ev .num{font-size:14px;color:var(--ink)}
+.tide-ev.hi{border-color:var(--sea)} .tide-ev.next{background:color-mix(in srgb,var(--milk) 14%,transparent)}
+.empty{color:var(--muted);font-size:13px;border:1px dashed var(--line);border-radius:4px;padding:18px;text-align:center}
+.compass{display:grid;place-items:center}
+/* fish */
+.cal{overflow-x:auto}
+.cal table{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}
+.cal th,.cal td{padding:6px 4px;text-align:center;border-bottom:1px solid var(--line)}
+.cal th:first-child,.cal td:first-child{text-align:left;padding-left:0;white-space:nowrap}
+.cal th.now{color:var(--ink);font-weight:700;border-bottom:2px solid var(--sulfur)}
+.cal td.now{background:color-mix(in srgb,var(--sulfur) 12%,transparent)}
+.dot{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle}
+.l0{background:transparent;border:1px solid var(--line)} .l1{background:color-mix(in srgb,var(--milk) 45%,transparent)} .l2{background:var(--sea)}
+.fishcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.fish{border-top:3px solid var(--sea);padding:10px 0 0;display:grid;gap:4px}
+.fish.l1{border-top-color:var(--milk);background:none}
+.fish h3{margin:0;font-size:15px}
+.fish p{margin:0;font-size:13px;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center}
+/* intake */
+.intake{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.intake{grid-template-columns:1fr}}
+.step{display:grid;gap:8px;min-width:0}
+textarea{width:100%;min-height:96px;font-family:var(--f-data);font-size:12px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);padding:8px;resize:vertical}
+textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--sulfur);outline-offset:2px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button,.btn{font:inherit;font-size:13px;padding:7px 14px;border-radius:4px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer;text-decoration:none;display:inline-block}
+button.ghost,.btn.ghost{background:transparent;color:var(--ink)}
+.msg{font-size:12px;min-height:1.2em}
+.msg.err{color:var(--crit)} .msg.good{color:var(--ok)}
+.seg{display:inline-flex;border:1px solid var(--ink);border-radius:4px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent;color:var(--ink);padding:6px 14px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.route{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.route{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.route div{display:grid;gap:2px;min-width:0}
+.route .num{font-size:20px}
+.dropzone{border:2px dashed var(--milk);border-radius:6px;padding:14px;text-align:center;font-size:14px}
+.dropzone.wait{background:color-mix(in srgb,var(--milk) 14%,transparent)}
+kbd{font-family:var(--f-data);font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;background:var(--bg)}
+.mapwrap{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:860px){.mapwrap{grid-template-columns:1fr}}
+#mapSvg{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:4px;background:var(--bg)}
+#mapSvg .land{fill:color-mix(in srgb,var(--muted) 22%,var(--paper));stroke:var(--muted);stroke-width:1}
+#mapSvg .isl{fill:color-mix(in srgb,var(--muted) 35%,var(--paper));stroke:var(--ink);stroke-width:1}
+#mapSvg .plab{fill:var(--ink);font-family:var(--f-body);font-size:12px;font-weight:500}
+#mapSvg .val{fill:var(--ink);font-size:10.5px;font-weight:600}
+.mapctl{display:grid;gap:12px}
+input[type=range]{width:100%;accent-color:var(--sulfur)}
+.ramp{height:10px;border-radius:2px;border:1px solid var(--line)}
+.src{display:grid;gap:10px;border:1px solid var(--line);border-radius:6px;padding:14px;background:var(--bg)}
+.src div{display:grid;gap:2px}.src b{font-size:16px}.src div span{font-size:13px;color:var(--muted)}
+.src .btn{font-size:15px;padding:10px 14px;text-align:center}
+.st{font-size:13px;color:var(--muted)}.st.ok{color:var(--ok);font-weight:500}.st.old{color:var(--warn);font-weight:500}
+.howto{margin:0;padding-left:1.4em;display:grid;gap:8px;font-size:14px;max-width:65ch}
+.howto .dev{display:inline-block;min-width:3em;font-size:12px;color:var(--muted)}
+#taMarine,#taWx{min-height:64px;font-family:var(--f-body);font-size:14px;border:2px dashed var(--milk);background:var(--paper)}
+.src.done{border-color:var(--ok)} .src.done textarea{border-style:solid;border-color:var(--line)}
+.gatewarn{display:grid;gap:4px;border:1px solid var(--warn);border-left-width:6px;border-radius:6px;padding:12px 14px;background:color-mix(in srgb,var(--warn) 10%,var(--paper));font-size:14px}
+.gatewarn b{color:var(--warn)}
+.fish{cursor:pointer;border-radius:0 0 4px 4px;outline-offset:4px}
+.fish:hover h3{color:var(--sea)}
+.fish .more{display:flex;gap:12px;font-size:12px;flex-wrap:wrap}
+.fname{cursor:pointer;border-bottom:1px dotted var(--muted)}
+.fishpop{position:fixed;z-index:30;width:300px;max-width:calc(100vw - 32px);background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px;display:grid;gap:6px;pointer-events:none}
+.fishpop figure{margin:0;border-radius:5px;overflow:hidden;background:#D7ECF0}
+.fishpop svg{display:block;width:100%;height:auto}
+.fishpop b{font-size:15px}.fishpop i{font-size:12px;color:var(--muted)}
+.fishpop .x{display:none}
+.fishpop.sheet{left:0!important;right:0;top:auto!important;bottom:0;width:auto;max-width:none;border-radius:14px 14px 0 0;pointer-events:auto;
+  padding:14px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));gap:8px}
+.fishpop.sheet .x{display:block;justify-self:end}
+.fishpop p{margin:0;font-size:13px;color:var(--muted)}
+.fishpop:not(.sheet) p,.fishpop:not(.sheet) .x,.fishpop:not(.sheet) .lnk{display:none}
+#fishBack{position:fixed;inset:0;z-index:29;background:rgba(0,0,0,.35)}
+.sci{display:block;font-size:12px;color:var(--muted)}.sci i{font-family:Georgia,"Times New Roman",serif}
+.cal td .sci{font-size:11px}
+.fish .cat{font-size:11px;color:var(--muted);letter-spacing:.08em}
+.cal tr.catrow td{text-align:left;padding:12px 0 4px;font-size:11px;letter-spacing:.12em;color:var(--muted);font-weight:700;border-bottom:1px solid var(--ink)}
+details#manualBox>summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
+details#manualBox[open]>summary{margin-bottom:10px}
+.banner{background:color-mix(in srgb,var(--sulfur) 18%,var(--paper));border:1px solid var(--sulfur);border-radius:6px;padding:10px 14px;font-size:13px}
+footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div style="display:grid;gap:4px">
+    <span class="lbl">石城漁港 ⇄ 龜山島 · 東北角海況</span>
+    <h1>文中號出航</h1>
+    <span class="coords" id="coords">24.98°N 121.95°E · 模式網格 ≈ 8 km · Asia/Taipei</span>
+  </div>
+  <div style="display:grid;gap:6px;justify-items:end">
+    <span class="pill" id="fresh"><i></i><span id="freshTxt">尚未載入資料</span></span>
+    <span class="coords" id="clock"></span>
+  </div>
+</header>
+
+<section class="panel autobar">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+    <div style="display:grid;gap:2px"><h2>資料自動更新</h2><span class="st" id="autoSt">正在取得最新海象與天氣資料…</span></div>
+    <button id="btnRefresh">立即重新整理</button>
+  </div>
+  <span class="lbl">開啟頁面時自動抓取，之後每 30 分鐘更新一次</span>
+</section>
+
+<details id="manualBox">
+<summary>自動取得失敗時：手動更新資料</summary>
+<section class="panel" id="intakeSec">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline"><h2>手動更新資料</h2><span class="lbl">平常不需要，網路受限時才使用</span></div>
+  <div class="intake">
+    <div class="src">
+      <div><b>海象資料</b><span>浪、潮汐、海流、水溫</span></div>
+      <a class="btn" id="lnkMarine" target="_blank" rel="noopener">① 開啟海象資料</a>
+      <span class="st" id="stMarine">尚未更新</span>
+      <textarea id="taMarine" placeholder="把「海象資料」頁的文字貼在這裡"></textarea>
+      <div class="msg" id="msgMarine" role="status"></div>
+    </div>
+    <div class="src">
+      <div><b>天氣資料</b><span>風、氣溫、天氣、氣壓</span></div>
+      <a class="btn" id="lnkWx" target="_blank" rel="noopener">② 開啟天氣資料</a>
+      <span class="st" id="stWx">尚未更新</span>
+      <textarea id="taWx" placeholder="把「天氣資料」頁的文字貼在這裡"></textarea>
+      <div class="msg" id="msgWx" role="status"></div>
+    </div>
+  </div>
+  <ol class="howto">
+    <li>按上面的按鈕，會開出一頁密密麻麻的文字，這是正常的。</li>
+    <li>把那一頁的文字全部複製：<br><span class="dev">電腦</span>按 <kbd>Ctrl</kbd>+<kbd>A</kbd> 再按 <kbd>Ctrl</kbd>+<kbd>C</kbd>（Mac 用 <kbd>⌘</kbd>）<br><span class="dev">手機</span>長按文字 → 選「全選」→「拷貝」</li>
+    <li>回到這一頁，貼到<b>同一張卡片</b>裡的框：海象貼海象框、天氣貼天氣框。<br><span class="dev">電腦</span>點一下框，按 <kbd>Ctrl</kbd>+<kbd>V</kbd><br><span class="dev">手機</span>長按框 → 選「貼上」</li>
+    <li>兩張卡片都出現綠色的「✓ 已更新」後，下方的海況內容才會打開。</li>
+  </ol>
+  <div class="msg" id="msg" role="status"></div>
+  <div class="btns"><button class="ghost" id="btnDemo">先看範例畫面</button><button class="ghost" id="btnClear">清除已存資料</button></div>
+</section>
+</details>
+
+<div class="gatewarn" id="gateWarn" role="alert"><b id="gateHead">正在取得資料…</b><span id="gateBody">海象資料和天氣資料都取得後，才會顯示潮汐、海流、浪、風、即時動態地圖與當季海洋生物等內容。</span><span class="num" id="gateProg">目前完成 0 / 2</span></div>
+
+<div id="gated" class="grid" style="gap:18px" hidden>
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+  <span class="lbl">觀測點</span>
+  <div class="seg" role="group" aria-label="切換觀測點"><button id="loc0" aria-pressed="true">石城漁港（母港）</button><button id="loc1" aria-pressed="false">龜山島海域</button></div>
+</div>
+
+<div class="banner" id="demoBanner" hidden>目前顯示的是<b>範例資料</b>，用來預覽版面，不代表實際海況。按上方「立即重新整理」即可換成實際資料。</div>
+
+
+<section class="grid g-top">
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">
+      <h2>潮汐</h2><span class="lbl" id="tideState">—</span>
+    </div>
+    <div class="row"><span>目前水位 <b id="tideNow">—</b></span><span>相對平均海平面（MSL），非港口潮高基準</span></div>
+    <div id="tideChart"><div class="empty">貼上海象資料後顯示 72 小時潮位曲線與滿潮、乾潮時間</div></div>
+    <div class="tidebar" id="tideEvents"></div>
+  </div>
+  <div class="panel">
+    <h2>海流</h2>
+    <div class="compass" id="curRose"></div>
+    <div class="big num" id="curSpd">—<small>節</small></div>
+    <div class="row"><span>流向（流去） <b id="curDir">—</b></span><span><b id="curMs">—</b> m/s</span></div>
+    <span class="lbl">含黑潮、潮流與風浪漂流的模式合成值</span>
+  </div>
+</section>
+
+<section class="grid g-4">
+  <div class="panel">
+    <span class="lbl">浪高 · 海況</span>
+    <div class="big num" id="wave">—<small>m</small></div>
+    <span class="state" id="seaState">—</span>
+    <div class="row"><span>週期 <b id="wavePer">—</b></span><span>來向 <b id="waveDir">—</b></span></div>
+    <div class="row"><span>湧浪 <b id="swell">—</b></span></div>
+  </div>
+  <div class="panel">
+    <span class="lbl">風</span>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div id="windRose"></div>
+      <div style="display:grid;gap:2px"><div class="big num" id="wind">—<small>節</small></div><span class="state" id="bft">—</span></div>
+    </div>
+    <div class="row"><span>來向 <b id="windDir">—</b></span><span>陣風 <b id="gust">—</b></span></div>
+  </div>
+  <div class="panel">
+    <span class="lbl">天氣 · 氣溫</span>
+    <div class="big num" id="temp">—<small>°C</small></div>
+    <div style="font-size:16px;font-weight:500" id="wx">—</div>
+    <div class="row"><span>體感 <b id="feel">—</b></span><span>濕度 <b id="rh">—</b></span></div>
+    <div class="row"><span>氣壓 <b id="pres">—</b></span><span>雨量 <b id="rain">—</b></span></div>
+  </div>
+  <div class="panel">
+    <span class="lbl">海表水溫 SST</span>
+    <div class="big num" id="sst">—<small>°C</small></div>
+    <div class="row" id="sstNote"><span>黑潮主流經過時水溫偏高、水色深藍</span></div>
+    <span class="lbl">龜山島周邊另有海底熱泉（牛奶海），局部水溫與水色和模式值不同</span>
+  </div>
+</section>
+
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline"><h2>航線：石城漁港 → 龜山島</h2><span class="lbl">直線航程，未計入繞行與港區限速</span></div>
+  <div class="route">
+    <div><span class="lbl">距離</span><span class="num" id="rDist">—</span></div>
+    <div><span class="lbl">航向</span><span class="num" id="rCourse">—</span></div>
+    <div><span class="lbl">航行時間</span><span class="num" id="rTime">—</span><span class="lbl" id="rSpdLbl"></span></div>
+    <div><span class="lbl">龜山島的風對去程</span><span class="num" id="rWind" style="font-size:16px">—</span><span class="lbl" id="rWave"></span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline"><h2>即時動態</h2><span class="lbl">示意圖，非航海圖 · 色塊由 7 個模式點內插</span></div>
+  <div class="mapwrap">
+    <div id="mapBox"></div>
+    <div class="mapctl">
+      <div class="seg" role="group" aria-label="地圖圖層"><button id="lyCur" aria-pressed="true">海流</button><button id="lyWind" aria-pressed="false">風</button><button id="lyWave" aria-pressed="false">浪</button></div>
+      <div style="display:grid;gap:4px"><label class="lbl" for="tSlider">時間</label><div style="display:flex;gap:10px;align-items:center"><button id="btnPlay" aria-pressed="false" aria-label="播放" style="min-width:76px">▶ 播放</button><select id="spd" aria-label="播放速度" style="font:inherit;font-size:13px;padding:6px;border:1px solid var(--line);border-radius:4px;background:var(--paper);color:var(--ink)"><option value="900">慢</option><option value="450" selected>中</option><option value="200">快</option></select></div><input type="range" id="tSlider" min="0" max="72" step="1" value="0"><span class="num" id="tLabel" style="font-size:14px">—</span></div>
+      <div style="display:grid;gap:4px"><span class="lbl" id="rampLbl">流速（節）</span><div class="ramp" id="ramp"></div><div class="row" style="justify-content:space-between"><span id="rampLo">0</span><span id="rampHi">—</span></div></div>
+      <div class="row" id="mapNote" style="font-size:12px">箭頭：海流指向流去方向；風與浪指向吹去、前進方向。</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline"><h2>未來 72 小時</h2><span class="lbl">浪高（柱）· 風速（線）· 風向（箭頭，指向吹去方向）</span></div>
+  <div id="fcChart"><div class="empty">貼上海象與天氣資料後顯示</div></div>
+</section>
+
+<section class="panel" id="fishSec">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">
+    <h2 id="fishTitle">當季海洋生物</h2>
+    <div class="legend"><span><span class="dot l2"></span> 盛產期</span><span><span class="dot l1"></span> 可見</span><span><span class="dot l0"></span> 少見</span></div>
+  </div>
+  <div class="fishcards" id="fishCards"></div>
+  <div class="cal" id="fishCal"></div>
+  <span class="lbl">依宜蘭（大溪、南方澳）漁業產季整理的概況，實際漁況隨黑潮流路、水溫與東北季風每年變動</span>
+</section>
+</div>
+
+
+<div id="fishBack" hidden></div>
+<div class="fishpop" id="fishPop" hidden role="dialog" aria-label="海洋生物圖鑑"><button class="ghost x" id="fishX">關閉</button><figure id="fpFig"></figure><b id="fpName"></b><i id="fpLat"></i><p id="fpDesc"></p><a class="btn ghost lnk" id="fpLnk" target="_blank" rel="noopener">看實際照片 ↗</a></div>
+
+<footer>
+  <span style="color:var(--ink);font-size:13px">作者：Nicholas Li</span>
+  <span>資料：Open-Meteo Marine（MeteoFrance SMOC 海流與潮位、波浪模式）與 Open-Meteo Forecast。模式在沿岸精度有限，不能取代官方潮汐表與航行警報。</span>
+  <span>官方即時觀測：<a href="https://www.cwa.gov.tw/V8/C/M/OBS_Marine.html" target="_blank" rel="noopener">中央氣象署 海象監測</a> · <a href="https://www.windy.com/24.84/121.95?waves,24.84,121.95,10" target="_blank" rel="noopener">Windy 浪況圖</a> · 龜山島開放登島期間為每年 3–10 月</span>
+</footer>
+</div>
+
+<script>
+(function(){
+const LOCS=[{n:'石城漁港',lat:24.977,lon:121.950},{n:'龜山島海域',lat:24.840,lon:121.950},
+ {n:'大溪外海',lat:24.930,lon:121.935},{n:'龜首北',lat:24.905,lon:122.030},{n:'龜山島東',lat:24.835,lon:122.050},{n:'外澳外海',lat:24.865,lon:121.880},{n:'龜山島南',lat:24.780,lon:121.950}];
+const LAT=LOCS.map(l=>l.lat).join(','), LON=LOCS.map(l=>l.lon).join(',');
+const MARINE_URL=`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LON}&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,sea_surface_temperature,ocean_current_velocity,ocean_current_direction,sea_level_height_msl&hourly=wave_height,wave_direction,sea_level_height_msl,ocean_current_velocity,ocean_current_direction&timezone=Asia%2FTaipei&past_days=1&forecast_days=3&cell_selection=sea`;
+const WX_URL=`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=kn&timezone=Asia%2FTaipei&past_days=1&forecast_days=3`;
+const $=id=>document.getElementById(id);
+$('lnkMarine').href=MARINE_URL; $('lnkWx').href=WX_URL;
+
+const DIRS=['北','北北東','東北','東北東','東','東南東','東南','南南東','南','南南西','西南','西南西','西','西北西','西北','北北西'];
+const dirName=d=>d==null?'—':DIRS[Math.round(((d%360)+360)%360/22.5)%16]+' '+Math.round(d)+'°';
+const tp=s=>new Date(s+(s.length<=16?':00':'')+'+08:00');
+const fmtT=d=>d.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+const fmtH=d=>d.toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false});
+const f=(v,n=1)=>v==null||isNaN(v)?'—':Number(v).toFixed(n);
+const svgNS='http://www.w3.org/2000/svg';
+
+function tick(){ $('clock').textContent='現在 '+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}); }
+tick(); setInterval(tick,30000);
+
+/* ---------- storage ---------- */
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+
+/* ---------- classifiers ---------- */
+function seaState(h){
+  const t=[[0.1,'微浪',1],[0.5,'小浪',1],[1.25,'輕浪～中浪',1],[2.5,'中浪～大浪',2],[4,'大浪',3],[6,'巨浪',3],[9,'狂浪',3],[14,'狂濤',3],[1e9,'怒濤',3]];
+  for(const [m,n,s] of t) if(h<m) return {n,cls:s===1?'s-ok':s===2?'s-warn':'s-crit'};
+}
+function beaufort(kn){
+  const lim=[1,4,7,11,17,22,28,34,41,48,56,64];
+  const names=['無風','軟風','輕風','微風','和風','清風','強風','疾風','大風','烈風','狂風','暴風','颶風'];
+  let b=lim.findIndex(x=>kn<x); if(b<0) b=12;
+  return {b,n:names[b],cls:b<=4?'s-ok':b<=6?'s-warn':'s-crit'};
+}
+const WMO={0:'晴',1:'大致晴朗',2:'多雲時晴',3:'陰',45:'霧',48:'霧凇',51:'毛毛雨',53:'毛毛雨',55:'濃毛毛雨',61:'小雨',63:'中雨',65:'大雨',66:'凍雨',67:'凍雨',71:'小雪',73:'中雪',75:'大雪',80:'陣雨',81:'較強陣雨',82:'豪雨陣雨',95:'雷雨',96:'雷雨伴冰雹',99:'強雷雨伴冰雹'};
+
+/* ---------- compass ---------- */
+function rose(el,deg,size,color,to){
+  const s=size,c=s/2,r=c-12;
+  let g=`<svg viewBox="0 0 ${s} ${s}" width="${s}" height="${s}" role="img" aria-label="方向 ${dirName(deg)}"><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--line)" stroke-width="1.5"/>`;
+  for(let i=0;i<16;i++){const a=i*22.5*Math.PI/180,l=i%4===0?8:4;g+=`<line x1="${c+Math.sin(a)*r}" y1="${c-Math.cos(a)*r}" x2="${c+Math.sin(a)*(r-l)}" y2="${c-Math.cos(a)*(r-l)}" stroke="var(--muted)" stroke-width="1"/>`;}
+  [['N',0],['E',90],['S',180],['W',270]].forEach(([t,a])=>{const rr=a*Math.PI/180;g+=`<text x="${c+Math.sin(rr)*(r+7)}" y="${c-Math.cos(rr)*(r+7)+3.5}" text-anchor="middle">${t}</text>`});
+  if(deg!=null){const d=to?deg:deg+180; // arrow points where it goes
+    g+=`<g transform="rotate(${d} ${c} ${c})"><line x1="${c}" y1="${c+r*0.6}" x2="${c}" y2="${c-r*0.62}" stroke="${color}" stroke-width="3" stroke-linecap="round"/><path d="M${c} ${c-r*0.82} L${c-7} ${c-r*0.52} L${c+7} ${c-r*0.52} Z" fill="${color}"/></g>`;}
+  g+=`<circle cx="${c}" cy="${c}" r="3" fill="var(--ink)"/></svg>`;
+  el.innerHTML=g;
+}
+
+/* ---------- tide ---------- */
+function tideEvents(times,h){
+  const ev=[];
+  for(let i=1;i<h.length-1;i++){
+    const a=h[i-1],b=h[i],c=h[i+1]; if(a==null||b==null||c==null) continue;
+    const hi=b>a&&b>=c, lo=b<a&&b<=c; if(!hi&&!lo) continue;
+    const den=a-2*b+c, off=den===0?0:0.5*(a-c)/den; // parabolic refine
+    const t=new Date(tp(times[i]).getTime()+off*3600e3);
+    ev.push({hi,t,v:b-0.25*(a-c)*off});
+  }
+  return ev;
+}
+function drawTide(times,h,now){
+  const W=760,H=200,pl=34,pr=10,pt=14,pb=26;
+  const ts=times.map(tp), t0=ts[0].getTime(), t1=ts[ts.length-1].getTime();
+  const vals=h.filter(v=>v!=null), mn=Math.min(...vals), mx=Math.max(...vals), pad=(mx-mn)*0.15||0.1;
+  const y0=mn-pad,y1=mx+pad;
+  const X=t=>pl+(t-t0)/(t1-t0)*(W-pl-pr), Y=v=>pt+(1-(v-y0)/(y1-y0))*(H-pt-pb);
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="潮位曲線">`;
+  // day bands + labels
+  let d=new Date(ts[0]); d=tp(times[0].slice(0,10)+'T00:00');
+  for(let k=0;k<6;k++){const a=d.getTime()+k*864e5; if(a>t1) break; const xa=X(Math.max(a,t0));
+    s+=`<line x1="${xa}" x2="${xa}" y1="${pt}" y2="${H-pb}" stroke="var(--line)" stroke-dasharray="2 3"/>`;
+    const lab=new Date(a+12*3600e3); if(lab.getTime()>t0&&lab.getTime()<t1) s+=`<text x="${X(lab.getTime())}" y="${H-8}" text-anchor="middle">${lab.toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei',month:'numeric',day:'numeric',weekday:'short'})}</text>`;}
+  // y grid
+  const step=(y1-y0)>1.2?0.5:0.25;
+  for(let v=Math.ceil(y0/step)*step;v<=y1;v+=step){s+=`<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="${Math.abs(v)<1e-9?1.2:.5}"/><text x="${pl-4}" y="${Y(v)+3}" text-anchor="end">${v.toFixed(2)}</text>`;}
+  let p='',area='';
+  ts.forEach((t,i)=>{if(h[i]==null)return;const cmd=p?'L':'M';p+=`${cmd}${X(t.getTime()).toFixed(1)} ${Y(h[i]).toFixed(1)} `;});
+  area=p+`L${X(t1)} ${H-pb} L${X(t0)} ${H-pb} Z`;
+  s+=`<path d="${area}" fill="var(--milk)" opacity=".16"/><path d="${p}" fill="none" stroke="var(--sea)" stroke-width="2.2"/>`;
+  tideEvents(times,h).forEach(e=>{const x=X(e.t.getTime()),y=Y(e.v);s+=`<circle cx="${x}" cy="${y}" r="3.5" fill="${e.hi?'var(--sea)':'var(--paper)'}" stroke="var(--sea)" stroke-width="1.5"/><text x="${x}" y="${e.hi?y-7:y+14}" text-anchor="middle">${fmtH(e.t)}</text>`;});
+  const nx=now.getTime(); if(nx>t0&&nx<t1){s+=`<line x1="${X(nx)}" x2="${X(nx)}" y1="${pt}" y2="${H-pb}" stroke="var(--sulfur)" stroke-width="2"/><text x="${X(nx)+4}" y="${pt+8}" style="fill:var(--sulfur)">現在</text>`;}
+  return s+'</svg>';
+}
+
+/* ---------- forecast chart ---------- */
+function drawForecast(m,w,now){
+  const W=760,H=210,pl=34,pr=38,pt=26,pb=26;
+  const t0=now.getTime()-3*3600e3, t1=t0+75*3600e3;
+  const X=t=>pl+(t-t0)/(t1-t0)*(W-pl-pr);
+  const wv=[],wd=[];
+  if(m) m.hourly.time.forEach((t,i)=>{const d=tp(t).getTime(); if(d>=t0&&d<=t1&&m.hourly.wave_height[i]!=null) wv.push([d,m.hourly.wave_height[i]]);});
+  if(w) w.hourly.time.forEach((t,i)=>{const d=tp(t).getTime(); if(d>=t0&&d<=t1) wd.push([d,w.hourly.wind_speed_10m[i],w.hourly.wind_direction_10m[i]]);});
+  const maxW=Math.max(1.5,...wv.map(x=>x[1]))*1.1, maxK=Math.max(15,...wd.map(x=>x[1]))*1.1;
+  const Yw=v=>pt+(1-v/maxW)*(H-pt-pb), Yk=v=>pt+(1-v/maxK)*(H-pt-pb);
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="72 小時浪高與風速">`;
+  for(let i=0;i<=4;i++){const v=maxW*i/4;s+=`<line x1="${pl}" x2="${W-pr}" y1="${Yw(v)}" y2="${Yw(v)}" stroke="var(--line)" stroke-width=".5"/><text x="${pl-4}" y="${Yw(v)+3}" text-anchor="end">${v.toFixed(1)}m</text><text x="${W-pr+4}" y="${Yw(v)+3}">${Math.round(maxK*i/4)}kt</text>`;}
+  for(let t=Math.ceil(t0/216e5)*216e5;t<t1;t+=216e5){const d=new Date(t);const hh=Number(d.toLocaleString('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',hour12:false}));
+    s+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle">${hh===0?d.toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei',month:'numeric',day:'numeric'}):String(hh).padStart(2,'0')+'時'}</text>`;}
+  const bw=(W-pl-pr)/78*0.7;
+  wv.forEach(([t,v])=>{const st=seaState(v);const col=st.cls==='s-ok'?'var(--milk)':st.cls==='s-warn'?'var(--warn)':'var(--crit)';s+=`<rect x="${X(t)-bw/2}" y="${Yw(v)}" width="${bw}" height="${H-pb-Yw(v)}" fill="${col}" opacity=".75"/>`;});
+  if(wd.length){let p='';wd.forEach(([t,k],i)=>p+=(i?'L':'M')+X(t).toFixed(1)+' '+Yk(k).toFixed(1)+' ');s+=`<path d="${p}" fill="none" stroke="var(--ink)" stroke-width="1.8"/>`;
+    wd.forEach(([t,k,d],i)=>{if(i%3)return;s+=`<g transform="translate(${X(t)} ${pt-12}) rotate(${d+180})"><line x1="0" y1="6" x2="0" y2="-6" stroke="var(--sea)" stroke-width="1.6"/><path d="M0 -8 L-3.5 -2 L3.5 -2Z" fill="var(--sea)"/></g>`;});}
+  const nx=now.getTime();s+=`<line x1="${X(nx)}" x2="${X(nx)}" y1="${pt}" y2="${H-pb}" stroke="var(--sulfur)" stroke-width="2"/>`;
+  if(!wv.length&&!wd.length) return '<div class="empty">此時段無資料</div>';
+  return s+'</svg>';
+}
+
+/* ---------- render ---------- */
+function render(){
+  const now=new Date();
+  const li=store.get('gs_loc')||0;
+  const pick=(d,i)=>!d?null:Array.isArray(d)?(d[i]||d[0]):(i===1?d:null);
+  const M=store.get('gs_marine'), Wd=store.get('gs_wx'), demo=store.get('gs_demo');
+  const m=pick(M,li), w=pick(Wd,li);
+  [0,1].forEach(i=>$('loc'+i).setAttribute('aria-pressed',String(i===li)));
+  $('coords').textContent=`${LOCS[li].n} · ${LOCS[li].lat.toFixed(2)}°N ${LOCS[li].lon.toFixed(2)}°E · 模式網格 ≈ 8 km · Asia/Taipei`;
+  const nDone=(M?1:0)+(Wd?1:0), open=nDone===2;
+  $('gated').hidden=!open; $('gateWarn').hidden=open; $('gateProg').textContent='目前完成 '+nDone+' / 2';
+  $('stMarine').closest('.src').classList.toggle('done',!!M); $('stWx').closest('.src').classList.toggle('done',!!Wd);
+  [['stMarine',M],['stWx',Wd]].forEach(([id,d])=>{const el=$(id);const c=d&&(Array.isArray(d)?d[0]:d).current;
+    if(!c){el.className='st';el.textContent='尚未更新';return;}
+    const age=(now-tp(c.time))/3600e3;el.className='st '+(demo?'':age>3?'old':'ok');
+    el.textContent=demo?'目前是範例資料':(age>3?'⚠ 資料已過 '+Math.round(age)+' 小時，請重新更新':'✓ 已更新（資料時間 '+fmtT(tp(c.time))+'）');});
+  renderRoute(pick(Wd,1),pick(M,1));
+  renderMap();
+  $('demoBanner').hidden=!demo;
+  const cur=m&&m.current, wc=w&&w.current;
+  // freshness
+  const stamps=[cur&&cur.time,wc&&wc.time].filter(Boolean).map(tp);
+  const pill=$('fresh');
+  if(!stamps.length){pill.className='pill';$('freshTxt').textContent='尚未載入資料';}
+  else{const age=(now-Math.min(...stamps))/3600e3;
+    pill.className='pill '+(demo?'demo':age>3?'warn':'ok');
+    $('freshTxt').textContent=(demo?'範例資料 · ':'')+'資料時間 '+fmtT(new Date(Math.min(...stamps)))+(age>3&&!demo?`（已過 ${Math.round(age)} 小時，請更新）`:'');}
+  // marine
+  if(cur){
+    $('wave').innerHTML=f(cur.wave_height,1)+'<small>m</small>';
+    const st=seaState(cur.wave_height||0); $('seaState').textContent=st.n; $('seaState').className='state '+st.cls;
+    $('wavePer').textContent=f(cur.wave_period,1)+' 秒'; $('waveDir').textContent=dirName(cur.wave_direction);
+    $('swell').textContent=f(cur.swell_wave_height,1)+' m · '+dirName(cur.swell_wave_direction)+(cur.swell_wave_period?' · '+f(cur.swell_wave_period,0)+' 秒':'');
+    $('sst').innerHTML=f(cur.sea_surface_temperature,1)+'<small>°C</small>';
+    const kmh=cur.ocean_current_velocity; $('curSpd').innerHTML=f(kmh/1.852,2)+'<small>節</small>'; $('curMs').textContent=f(kmh/3.6,2); $('curDir').textContent=dirName(cur.ocean_current_direction);
+    rose($('curRose'),cur.ocean_current_direction,150,'var(--milk)',true);
+    // tide
+    const H=m.hourly.sea_level_height_msl, T=m.hourly.time;
+    if(H&&H.some(v=>v!=null)){
+      $('tideChart').innerHTML=drawTide(T,H,now);
+      $('tideNow').textContent=(cur.sea_level_height_msl>=0?'+':'')+f(cur.sea_level_height_msl,2)+' m';
+      const ev=tideEvents(T,H); const nextI=ev.findIndex(e=>e.t>now);
+      if(nextI>=0){const n=ev[nextI];const mins=Math.round((n.t-now)/6e4);$('tideState').textContent=(n.hi?'漲潮中':'退潮中')+` · 距${n.hi?'滿潮':'乾潮'} ${Math.floor(mins/60)} 時 ${mins%60} 分`;}
+      $('tideEvents').innerHTML=ev.filter(e=>e.t>now-6*3600e3).slice(0,8).map((e,i)=>`<div class="tide-ev ${e.hi?'hi':''} ${ev.indexOf(e)===nextI?'next':''}"><span class="lbl">${e.hi?'滿潮':'乾潮'}</span><span class="num">${fmtT(e.t)}</span><span class="num" style="font-size:12px;color:var(--muted)">${e.v>=0?'+':''}${e.v.toFixed(2)} m</span></div>`).join('');
+    }
+  } else { rose($('curRose'),null,150,'var(--milk)',true); }
+  // weather
+  if(wc){
+    $('temp').innerHTML=f(wc.temperature_2m,1)+'<small>°C</small>'; $('wx').textContent=WMO[wc.weather_code]||('代碼 '+wc.weather_code);
+    $('feel').textContent=f(wc.apparent_temperature,1)+'°C'; $('rh').textContent=f(wc.relative_humidity_2m,0)+'%';
+    $('pres').textContent=f(wc.pressure_msl,0)+' hPa'; $('rain').textContent=f(wc.precipitation,1)+' mm';
+    $('wind').innerHTML=f(wc.wind_speed_10m,0)+'<small>節</small>'; const b=beaufort(wc.wind_speed_10m||0); $('bft').textContent=b.b+' 級 '+b.n; $('bft').className='state '+b.cls;
+    $('windDir').textContent=dirName(wc.wind_direction_10m)+(((wc.wind_direction_10m>=11&&wc.wind_direction_10m<=79))?'（東北季風）':''); $('gust').textContent=f(wc.wind_gusts_10m,0)+' 節';
+    rose($('windRose'),wc.wind_direction_10m,96,'var(--sea)',false);
+  } else rose($('windRose'),null,96,'var(--sea)',false);
+  if(m||w) $('fcChart').innerHTML=drawForecast(m,w,now);
+}
+
+/* ---------- map ---------- */
+const MB={lon0:121.80,lon1:122.09,lat0:24.75,lat1:25.03}, MW=600, KX=Math.cos(24.9*Math.PI/180);
+const MH=Math.round(MW*(MB.lat1-MB.lat0)/((MB.lon1-MB.lon0)*KX));
+const PX=(lat,lon)=>[(lon-MB.lon0)/(MB.lon1-MB.lon0)*MW,(MB.lat1-lat)/(MB.lat1-MB.lat0)*MH];
+const COAST=[[25.03,121.930],[25.020,121.945],[25.012,121.975],[25.006,122.000],[24.995,121.975],[24.978,121.952],[24.962,121.925],[24.945,121.905],[24.925,121.880],[24.905,121.865],[24.885,121.850],[24.865,121.838],[24.830,121.830],[24.800,121.825],[24.75,121.825]];
+let layer='cur';
+function mapVal(arrM,arrW,i,tMs){
+  const m=arrM&&arrM[i], w=arrW&&arrW[i];
+  const at=(d,key)=>{if(!d||!d.hourly||!d.hourly[key])return null;const T=d.hourly.time;let best=-1,bd=1e18;for(let k=0;k<T.length;k++){const dd=Math.abs(tp(T[k]).getTime()-tMs);if(dd<bd){bd=dd;best=k}}return bd<=5400e3?d.hourly[key][best]:null;};
+  if(layer==='cur'){const v=at(m,'ocean_current_velocity'),d=at(m,'ocean_current_direction');return v==null?null:{v:v/1.852,d,to:true,u:'節'};}
+  if(layer==='wind'){const v=at(w,'wind_speed_10m'),d=at(w,'wind_direction_10m');return v==null?null:{v,d,to:false,u:'節'};}
+  const v=at(m,'wave_height'),d=at(m,'wave_direction');return v==null?null:{v,d,to:false,u:'m'};
+}
+function renderMap(){
+  const M=store.get('gs_marine'),W=store.get('gs_wx');
+  const arrM=Array.isArray(M)?M:M?[null,M]:null, arrW=Array.isArray(W)?W:W?[null,W]:null;
+  const base=new Date();base.setMinutes(0,0,0);
+  const tMs=base.getTime()+Number($('tSlider').value)*3600e3;
+  $('tLabel').textContent=fmtT(new Date(tMs))+(Number($('tSlider').value)===0?'（現在）':' · +'+$('tSlider').value+' 小時');
+  const pts=LOCS.map((l,i)=>{const r=mapVal(arrM,arrW,i,tMs);return r&&{...l,...r};}).filter(Boolean);
+  const cfg={cur:['流速（節）',3,'var(--milk)'],wind:['風速（節）',30,'var(--sea)'],wave:['浪高（m）',4,'var(--warn)']}[layer];
+  const vmax=Math.max(cfg[1]*0.5,...pts.map(p=>p.v));
+  $('rampLbl').textContent=cfg[0];$('rampHi').textContent=vmax.toFixed(layer==='wind'?0:1);
+  $('ramp').style.background=`linear-gradient(90deg,color-mix(in srgb,${cfg[2]} 5%,transparent),${cfg[2]})`;
+  let s=`<svg id="mapSvg" viewBox="0 0 ${MW} ${MH}" role="img" aria-label="海況地圖">`;
+  // IDW field
+  if(pts.length>=2){const step=15;const pp=pts.map(p=>({xy:PX(p.lat,p.lon),v:p.v}));
+    for(let y=0;y<MH;y+=step)for(let x=0;x<MW;x+=step){let num=0,den=0,hit=null;
+      for(const q of pp){const dx=q.xy[0]-x-step/2,dy=q.xy[1]-y-step/2,d2=dx*dx+dy*dy;if(d2<1){hit=q.v;break}const wgt=1/(d2*d2);num+=wgt*q.v;den+=wgt;}
+      const v=hit!=null?hit:num/den;const a=Math.min(1,v/vmax);
+      s+=`<rect x="${x}" y="${y}" width="${step+0.5}" height="${step+0.5}" fill="${cfg[2]}" opacity="${(0.06+a*0.55).toFixed(2)}"/>`;}}
+  // graticule
+  for(let la=24.8;la<25.03;la+=0.1){const y=PX(la,0)[1];s+=`<line x1="0" x2="${MW}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width=".6" stroke-dasharray="3 4"/><text x="${MW-4}" y="${y-3}" text-anchor="end">${la.toFixed(1)}°N</text>`;}
+  for(let lo=121.9;lo<122.09;lo+=0.1){const x=PX(0,lo)[0];s+=`<line y1="0" y2="${MH}" x1="${x}" x2="${x}" stroke="var(--line)" stroke-width=".6" stroke-dasharray="3 4"/><text x="${x+3}" y="${MH-4}">${lo.toFixed(1)}°E</text>`;}
+  // land
+  let d='M0 0 ';COAST.forEach(([la,lo])=>{const [x,y]=PX(la,lo);d+=`L${x.toFixed(1)} ${y.toFixed(1)} `;});d+=`L0 ${MH} Z`;
+  s+=`<path class="land" d="${d}"/>`;
+  const kmx=MW/((MB.lon1-MB.lon0)*111.32*KX), [ix,iy]=PX(24.843,121.947), [hx,hy]=PX(24.839,121.966);
+  s+=`<ellipse class="isl" cx="${ix}" cy="${iy}" rx="${1.35*kmx}" ry="${0.8*kmx}"/><ellipse class="isl" cx="${hx}" cy="${hy}" rx="${0.4*kmx}" ry="${0.28*kmx}"/>`;
+  // route
+  const [sx,sy]=PX(LOCS[0].lat,LOCS[0].lon);
+  s+=`<line x1="${sx}" y1="${sy}" x2="${ix}" y2="${iy-0.8*kmx-4}" stroke="var(--sulfur)" stroke-width="2" stroke-dasharray="6 5"/>`;
+  [['石城漁港',24.978,121.950,'end',-8],['大溪',24.945,121.905,'end',-8],['頭城',24.865,121.838,'end',-8],['龜山島',24.843,121.951,'middle',0]].forEach(([n,la,lo,an,dx])=>{const [x,y]=PX(la,lo);
+    s+=n==='龜山島'?`<text class="plab" x="${x}" y="${y+0.8*kmx+16}" text-anchor="middle">${n}</text>`:`<circle cx="${x}" cy="${y}" r="3" fill="var(--ink)"/><text class="plab" x="${x+dx}" y="${y+4}" text-anchor="${an}">${n}</text>`;});
+  // arrows
+  pts.forEach(p=>{const [x,y]=PX(p.lat,p.lon);const L=14+Math.min(1,p.v/vmax)*22;const rot=p.d==null?null:(p.to?p.d:p.d+180);
+    if(rot!=null) s+=`<g transform="translate(${x} ${y}) rotate(${rot})"><line x1="0" y1="${L/2}" x2="0" y2="${-L/2+6}" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/><path d="M0 ${-L/2-2} L-5.5 ${-L/2+7} L5.5 ${-L/2+7}Z" fill="var(--ink)"/></g>`;
+    s+=`<circle cx="${x}" cy="${y}" r="2.5" fill="var(--paper)" stroke="var(--ink)"/><text class="val" x="${x+9}" y="${y+14}">${p.v.toFixed(layer==='wind'?0:1)}${p.u}</text>`;});
+  if(!pts.length) s+=`<text class="plab" x="${MW*0.62}" y="${MH*0.45}" text-anchor="middle">貼上新版連結的資料後顯示</text>`;
+  s+=`<text x="8" y="16">N ↑</text></svg>`;
+  $('mapBox').innerHTML=s;
+  $('mapNote').textContent=pts.length&&pts.length<LOCS.length?`目前資料只有 ${pts.length} 個點，重新用上方連結取得資料可看到完整 7 點色塊。`:'箭頭：海流指向流去方向；風與浪指向吹去、前進方向。';
+}
+[['lyCur','cur'],['lyWind','wind'],['lyWave','wave']].forEach(([id,k])=>$(id).onclick=()=>{layer=k;['lyCur','lyWind','lyWave'].forEach(b=>$(b).setAttribute('aria-pressed',String(b===id)));renderMap();});
+$('tSlider').oninput=()=>{stopPlay();renderMap();};
+let playT=null;
+function stopPlay(){if(playT){clearInterval(playT);playT=null;}const b=$('btnPlay');b.textContent='▶ 播放';b.setAttribute('aria-pressed','false');b.setAttribute('aria-label','播放');}
+function startPlay(){stopPlay();const b=$('btnPlay');b.textContent='❚❚ 暫停';b.setAttribute('aria-pressed','true');b.setAttribute('aria-label','暫停');
+  playT=setInterval(()=>{const sl=$('tSlider');let v=Number(sl.value)+1;if(v>Number(sl.max))v=0;sl.value=v;renderMap();},Number($('spd').value));}
+$('btnPlay').onclick=()=>playT?stopPlay():startPlay();
+$('spd').onchange=()=>{if(playT)startPlay();};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlay();});
+
+/* ---------- route ---------- */
+function hav(a,b){const R=6371,t=x=>x*Math.PI/180,dl=t(b.lat-a.lat),dn=t(b.lon-a.lon);const h=Math.sin(dl/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function brg(a,b){const t=x=>x*Math.PI/180;const y=Math.sin(t(b.lon-a.lon))*Math.cos(t(b.lat));const x=Math.cos(t(a.lat))*Math.sin(t(b.lat))-Math.sin(t(a.lat))*Math.cos(t(b.lat))*Math.cos(t(b.lon-a.lon));return (Math.atan2(y,x)*180/Math.PI+360)%360;}
+const ISLAND={lat:24.843,lon:121.951};
+function relLabel(from,course){if(from==null)return '—';let d=Math.abs(((from-course)%360+540)%360-180);return d<=45?'迎面（頂風）':d>=135?'船尾（順風）':'側面（橫風）';}
+function renderRoute(w,m){
+  const km=hav(LOCS[0],ISLAND), nm=km/1.852, c=brg(LOCS[0],ISLAND), spd=15;
+  $('rDist').textContent=nm.toFixed(1)+' 浬'; $('rCourse').textContent=Math.round(c)+'°（'+DIRS[Math.round(c/22.5)%16]+'）';
+  const mins=Math.round(nm/spd*60); $('rTime').textContent='約 '+mins+' 分'; $('rSpdLbl').textContent=`以 ${spd} 節計 · ${km.toFixed(1)} km`;
+  const wc=w&&w.current, mc=m&&m.current;
+  $('rWind').textContent=wc?relLabel(wc.wind_direction_10m,c)+' '+f(wc.wind_speed_10m,0)+' 節':'—';
+  $('rWave').textContent=mc?'浪 '+f(mc.wave_height,1)+' m 來自'+relLabel(mc.wave_direction,c).replace(/（.*）/,''):'';
+}
+[0,1].forEach(i=>$('loc'+i).onclick=()=>{store.set('gs_loc',i);location.hash='';resetPanels();render();});
+function resetPanels(){['wave','sst','curSpd','temp','wind'].forEach(id=>{const e=$(id);e.innerHTML='—'+(e.querySelector('small')?e.querySelector('small').outerHTML:'');});
+  ['seaState','wavePer','waveDir','swell','curDir','curMs','wx','feel','rh','pres','rain','bft','windDir','gust','tideNow','tideState'].forEach(id=>$(id).textContent='—');
+  $('tideEvents').innerHTML='';$('tideChart').innerHTML='<div class="empty">此觀測點尚無資料，請貼上新版連結的資料</div>';}
+
+/* ---------- intake ---------- */
+function ingest(text){
+  const j=parse(text); const first=Array.isArray(j)?j[0]:j;
+  if(!first||!first.current) throw new Error('不是預期的資料格式');
+  if('wave_height' in first.current||'sea_level_height_msl' in first.current){store.set('gs_marine',j);return '海象';}
+  if('temperature_2m' in first.current){store.set('gs_wx',j);return '天氣';}
+  throw new Error('不是預期的資料格式');
+}
+function parse(txt){const j=JSON.parse(txt.trim()); if(j.error) throw new Error(j.reason||'資料服務回傳錯誤，請稍後再試'); return j;}
+function kindOf(j){const f0=Array.isArray(j)?j[0]:j;if(!f0||!f0.current)return null;
+  if('wave_height' in f0.current||'sea_level_height_msl' in f0.current)return 'marine';if('temperature_2m' in f0.current)return 'wx';return null;}
+function takeInto(expect,ta,msgEl){
+  const t=ta.value; if(t.trim().length<20) return;
+  let j; try{j=parse(t);}catch(err){msgEl.className='msg err';msgEl.textContent=/JSON|Unexpected|position/.test(err.message)?'貼上的內容不完整，請回到資料頁「全選」後再複製一次':err.message;return;}
+  const k=kindOf(j);
+  if(!k){msgEl.className='msg err';msgEl.textContent='這段文字不是海象或天氣資料，請用這張卡片上的按鈕開啟資料頁再複製';return;}
+  if(k!==expect){msgEl.className='msg err';msgEl.textContent=k==='wx'?'這是「天氣資料」，請貼到天氣資料的框':'這是「海象資料」，請貼到海象資料的框';return;}
+  if(store.get('gs_demo')){['gs_marine','gs_wx','gs_demo'].forEach(store.del);}
+  store.set(expect==='marine'?'gs_marine':'gs_wx',j); ta.value='';
+  msgEl.className='msg good';msgEl.textContent='✓ 貼上成功';
+  render();
+}
+$('taMarine').addEventListener('input',e=>takeInto('marine',e.target,$('msgMarine')));
+$('taWx').addEventListener('input',e=>takeInto('wx',e.target,$('msgWx')));
+$('btnClear').onclick=()=>{['gs_marine','gs_wx','gs_demo'].forEach(store.del);$('msg').className='msg';$('msg').textContent='已清除';location.reload();};
+$('btnDemo').onclick=()=>{
+  const base=new Date(); base.setMinutes(0,0,0);
+  const iso=d=>new Date(d.getTime()+8*3600e3).toISOString().slice(0,16);
+  const T=[],H=[],WV=[],WD=[],CV=[],WT=[],WS=[],WDir=[];
+  const start=new Date(base.getTime()-24*3600e3);
+  for(let i=0;i<96;i++){const d=new Date(start.getTime()+i*3600e3),t=i;T.push(iso(d));
+    H.push(+(0.55*Math.sin(2*Math.PI*t/12.42)+0.18*Math.sin(2*Math.PI*t/23.93+1)+0.05).toFixed(3));
+    WV.push(+(1.6+0.6*Math.sin(t/14)).toFixed(2));WD.push(45);CV.push(+(2+0.8*Math.sin(2*Math.PI*t/12.42)).toFixed(2));
+    WT.push(+(24+2*Math.sin((t-8)/24*2*Math.PI)).toFixed(1));WS.push(+(16+5*Math.sin(t/10)).toFixed(1));WDir.push(40+10*Math.sin(t/8));}
+  const k=24;
+  const mk={current:{time:T[k],wave_height:WV[k],wave_direction:48,wave_period:6.8,swell_wave_height:1.1,swell_wave_direction:70,swell_wave_period:9,sea_surface_temperature:26.4,ocean_current_velocity:CV[k],ocean_current_direction:28,sea_level_height_msl:H[k]},hourly:{time:T,sea_level_height_msl:H,wave_height:WV,wave_direction:WD,ocean_current_velocity:CV}};
+  const mp=JSON.parse(JSON.stringify(mk));mp.current.wave_height=+(WV[k]*0.7).toFixed(2);mp.current.ocean_current_velocity=+(CV[k]*0.5).toFixed(2);mp.hourly.wave_height=WV.map(v=>+(v*0.7).toFixed(2));
+  mk.hourly.ocean_current_direction=T.map((_,i)=>28+40*Math.sin(2*Math.PI*i/12.42));
+  mp.hourly.ocean_current_direction=mk.hourly.ocean_current_direction.slice();
+  const extra=[0.8,1.2,1.5,0.9,1.1].map((fct,j)=>{const o=JSON.parse(JSON.stringify(mk));o.hourly.ocean_current_velocity=CV.map(v=>+(v*fct).toFixed(2));o.hourly.wave_height=WV.map(v=>+(v*(0.8+j*0.1)).toFixed(2));o.hourly.ocean_current_direction=o.hourly.ocean_current_direction.map(v=>v+j*8);return o;});
+  store.set('gs_marine',[mp,mk,...extra]);
+  const wk={current:{time:T[k],temperature_2m:WT[k],relative_humidity_2m:78,apparent_temperature:WT[k]+0.8,weather_code:2,precipitation:0,pressure_msl:1014,wind_speed_10m:WS[k],wind_direction_10m:42,wind_gusts_10m:WS[k]+7},hourly:{time:T,temperature_2m:WT,wind_speed_10m:WS,wind_direction_10m:WDir}};
+  const wx=[0.85,1,0.95,1.15,1.2,0.9,1.05].map(fct=>{const o=JSON.parse(JSON.stringify(wk));o.hourly.wind_speed_10m=WS.map(v=>+(v*fct).toFixed(1));return o;});
+  store.set('gs_wx',wx);
+  store.set('gs_demo',true); $('msg').className='msg';$('msg').textContent='已載入範例（非實際海況）'; render();
+};
+
+/* ---------- fish ---------- */
+const FISH=[
+ ['鯖魚',[2,2,1,1,0,0,0,1,2,2,2,2],'表層洄游魚，夜間燈光圍網捕撈。秋冬脂肪最豐，南方澳產量占全台九成以上；春季在彭佳嶼到蘇澳外海產卵。','mack','Scomber japonicus','魚類','白腹鯖、花腹鯖'],
+ ['白帶魚',[2,2,1,1,1,1,1,1,2,2,2,2],'龜山島周邊拖網常見，秋冬為釣季旺期，夜間上浮覓食。','cutl','Trichiurus lepturus','魚類','白帶魚'],
+ ['竹筴魚 · 紅尾',[1,1,1,1,1,1,1,1,2,2,2,1],'成群活動於中表層，秋季數量明顯增加，常與鯖魚混獲。','scad','Trachurus japonicus','魚類','日本竹筴魚、紅尾圓鰺'],
+ ['紅甘',[2,2,1,1,1,1,1,1,1,2,2,2],'東北角代表魚種，棲息於 15–360 公尺岩礁區，全年可捕；入秋水溫下降後大量攝食，肉質最肥美，船釣鐵板熱門目標。','amber','Seriola dumerili','魚類','杜氏鰤'],
+ ['赤鯮',[1,1,1,1,1,1,1,1,1,2,2,2],'棲息於大陸棚沙泥底，入秋東北季風起後延繩釣漁況轉佳；背上有黃色斑塊，口中有犬齒狀牙。','dentex','Dentex hypselosomus','魚類','黃牙鯛'],
+ ['盤仔',[1,1,1,1,1,1,1,1,1,1,1,1],'分布於北部與東北部大陸棚，偏好沙泥底與礁區外圍，深可達約 100 公尺，大魚多在較深處；全年皆有產，常見於底拖與船釣。','evynnis','Evynnis cardinalis','魚類','紅鋤齒鯛'],
+ ['黃雞魚',[1,1,1,1,2,2,2,1,1,1,1,1],'成群棲息於沿岸岩礁區，身上有三條黃褐色縱紋（幼魚明顯），夏季產卵前最肥美，東北角船釣與磯釣常見。','grunt','Parapristipoma trilineatum','魚類','三線磯鱸'],
+ ['剝皮魚 · 白達仔',[2,2,2,1,1,0,0,0,0,1,1,2],'皮厚而粗，料理前需剝皮因而得名；頭上有一根硬棘，嘴小。北部入冬後漁獲增加。','filef','Thamnaconus modestus','魚類','馬面魨'],
+ ['雨傘旗魚',[0,0,0,0,0,1,1,2,2,2,1,0],'追隨黑潮暖水北上，夏末到秋季於東部近海出現，十月仍可見。','sail','Istiophorus platypterus','魚類','平鰭旗魚'],
+ ['白肉旗魚 · 黑皮旗魚',[2,2,1,0,0,0,0,0,0,1,2,2],'東北季風吹起後進入鏢旗魚季，風浪愈大往往漁況愈好。','marlin','Istiompax indica','魚類','立翅旗魚、黑皮旗魚'],
+ ['煙仔 · 正鰹',[0,0,0,1,1,2,2,2,2,1,0,0],'黑潮帶來的鰹類，夏秋最多，十月進入尾聲。','skip','Katsuwonus pelamis','魚類','正鰹'],
+ ['鬼頭刀',[0,0,1,2,2,2,1,1,1,1,0,0],'春夏追逐飛魚北上，愛躲在漂流物下；秋季零星，水溫下降後南返。','mahi','Coryphaena hippurus','魚類','鯕鰍'],
+ ['透抽 · 鎖管',[0,0,0,1,2,2,2,2,1,0,0,0],'夏季夜間集魚燈釣的主角，九月後漸少；市場上的鎖管多為較小的透抽。','squid','Uroteuthis edulis','頭足類','劍尖槍鎖管'],
+ ['軟絲',[1,1,1,2,2,2,1,1,2,2,2,1],'春夏靠近岸邊礁區與海藻產卵；秋季幼體長大，是木蝦路亞的旺季。身體兩側整圈都是鰭。','oval','Sepioteuthis lessoniana','頭足類','萊氏擬烏賊'],
+ ['花枝',[0,1,2,2,2,2,1,0,0,0,0,0],'北部與東北角是主要棲地，3–6 月為產季；身體寬扁，背上有虎斑紋，體內有一片石灰質「花枝骨」。','cuttle','Sepia pharaonis','頭足類','虎斑烏賊'],
+ ['花蟹',[1,1,1,1,1,1,1,1,2,2,2,1],'大溪漁港常見蟹類，秋季最肥美；殼上有藍白斑紋，最後一對腳扁平如槳，善於游泳。','crabB','Portunus pelagicus','蝦蟹類','遠海梭子蟹'],
+ ['三點蟹',[1,1,1,1,1,1,1,1,2,2,2,1],'甲殼後方有三個紅色圓斑，秋季最肥美，與花蟹同為梭子蟹，常見於沙泥底拖網。','crab3','Portunus sanguinolentus','蝦蟹類','紅星梭子蟹'],
+ ['白底仔',[0,0,0,1,1,2,2,2,1,1,0,0],'東北角夏季的在地美味，躲在風浪大的岩礁縫隙、潮間帶水面下；漁民多在夜間頭戴探照燈徒手抓或垂釣。','plag','Plagusia squamosa','蝦蟹類','鱗形斜紋蟹'],
+ ['牛角蟹 · 牛蹄蟹',[1,1,1,1,1,1,1,1,1,1,1,1],'梭子蟹科，殼面布滿細小斑點，最後一對腳扁平如槳，常見於沙底拖網；沒有查到明確產季資料，標為全年可見。','crabO','Ovalipes punctatus','蝦蟹類','細點圓趾蟹'],
+ ['正甜蝦 · 黃膏甜蝦',[1,1,1,1,1,1,1,1,1,1,1,1],'大溪漁港常見的拖網蝦，頭部帶黃膏者稱黃膏甜蝦，生食口感甘甜；沒有查到明確產季資料，標為全年可見。','shrimpY','Solenocera melantho','蝦蟹類','大管鞭蝦'],
+ ['胭脂蝦',[1,1,1,1,1,1,1,1,1,1,1,1],'大溪漁港代表性深海蝦，全身紅豔；由深海拖網捕撈，沒有查到明確產季資料，標為全年可見。','shrimp','Aristaeomorpha foliacea','蝦蟹類',''],
+ ['飛魚',[0,0,1,2,2,1,0,0,0,0,0,0],'春季隨黑潮北上產卵，是鬼頭刀的主要食物。','flying','Cheilopogon','魚類','燕鰩魚類'],
+];
+const HOVER=window.matchMedia&&matchMedia('(hover: hover) and (pointer: fine)').matches;
+const photoUrl=la=>'https://zh.wikipedia.org/w/index.php?search='+encodeURIComponent(la);
+/* original illustrations: body gradient + species marks, clipped to body */
+function fishArt(k){
+  const g=(id,a,b,c)=>`<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset=".55" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></linearGradient>`;
+  const tor=(x0,x1,cy,ht,hb)=>`M${x0} ${cy} C${x0+28} ${cy-ht} ${x1-50} ${cy-ht*.92} ${x1} ${cy-4} L${x1} ${cy+4} C${x1-50} ${cy+hb*.92} ${x0+28} ${cy+hb} ${x0} ${cy} Z`;
+  const fork=(x,cy,sp,col)=>`<path d="M${x-3} ${cy-4} L${x+32} ${cy-sp} L${x+18} ${cy} L${x+32} ${cy+sp} L${x-3} ${cy+4} Z" fill="${col}"/>`;
+  const eye=(x,y,r)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="#F4F1E8"/><circle cx="${x+.6}" cy="${y}" r="${r*.55}" fill="#1B1B1B"/>`;
+  const wrap=(inner)=>`<svg viewBox="0 0 260 120" xmlns="${svgNS}" role="img"><defs>${inner.defs||''}</defs><path d="M0 104 Q65 98 130 104 T260 104 V120 H0Z" fill="#BFDDE4"/>${inner.body}</svg>`;
+  const body=(id,d,grad,marks,extra,front)=>({defs:grad+`<clipPath id="c${id}"><path d="${d}"/></clipPath>`,body:(extra||'')+`<path d="${d}" fill="url(#g${id})"/><g clip-path="url(#c${id})">${marks||''}</g><path d="${d}" fill="none" stroke="#2B3A40" stroke-width="1" opacity=".5"/>`+(front||'')});
+  switch(k){
+  case 'mack':{const d=tor(22,200,58,24,22);let m='';for(let i=0;i<12;i++){const x=55+i*12;m+=`<path d="M${x} 32 q6 6 0 12 q-6 6 0 12" fill="none" stroke="#14323A" stroke-width="2.4"/>`;}
+    return wrap(body('mk',d,g('gmk','#2F6F78','#8FB6B4','#EEF1EE'),m,`<path d="M88 36 L98 18 L112 36Z M140 34 L146 22 L156 34Z M138 82 L146 94 L156 82Z" fill="#3E6A70"/>`+fork(198,58,26,'#3E6A70'),eye(38,54,5)));}
+  case 'cutl':{const d=`M8 62 C40 46 120 50 250 58 L250 60 C120 66 40 74 8 66 Z`;
+    return wrap(body('ct',d,g('gct','#B9C6CC','#E6ECEE','#F7F9FA'),`<path d="M8 62 L250 59" stroke="#9AAAB0" stroke-width="1"/>`,`<path d="M30 52 C100 40 180 48 248 56 L248 57 C180 52 100 48 30 56Z" fill="#C9D6DA" opacity=".9"/>`,eye(22,59,4.5)+`<path d="M8 64 L20 66" stroke="#2B3A40" stroke-width="1.4"/><path d="M12 61 l2 3 l2 -3 l2 3" stroke="#fff" stroke-width=".8" fill="none"/>`));}
+  case 'scad':{const d=tor(24,198,58,22,20);
+    return wrap(body('sc',d,g('gsc','#4F6F86','#A9BBC6','#EDF0F2'),`<path d="M40 50 C90 46 140 54 198 58" stroke="#5D6B70" stroke-width="3" fill="none" stroke-dasharray="2 2"/><circle cx="52" cy="44" r="3" fill="#2B3A40"/>`,`<path d="M95 38 L104 22 L118 38Z M128 37 L150 30 L176 48Z M128 79 L150 86 L176 68Z" fill="#7D8F9A"/>`+fork(196,58,26,'#D2463A'),eye(40,54,6)));}
+  case 'amber':{const d=tor(20,200,58,27,24);
+    return wrap(body('am',d,g('gam','#6F6A3C','#C9B98A','#F1EEE2'),`<path d="M24 52 C80 44 150 50 200 57 L200 61 C150 56 80 52 24 58Z" fill="#E0A21E"/><path d="M30 44 L52 52" stroke="#5A4A2A" stroke-width="3"/>`,`<path d="M80 35 L84 28 L92 33Z M104 33 C130 28 160 34 184 48 L176 49 C156 41 130 37 106 37Z M120 82 C142 86 164 78 182 66 L174 65 C158 73 140 78 122 79Z" fill="#8A7F48"/>`+fork(198,58,30,'#A28B3C'),eye(38,53,5.5)));}
+  case 'dentex':{const d=`M28 64 C40 30 110 18 170 46 L196 58 L196 66 L170 76 C120 98 50 94 28 64 Z`;
+    return wrap(body('dx',d,g('gdx','#D7586A','#E9939A','#F6DADC'),`<ellipse cx="96" cy="38" rx="14" ry="5" fill="#F0C64A"/><ellipse cx="124" cy="42" rx="12" ry="4" fill="#F0C64A"/><ellipse cx="146" cy="48" rx="9" ry="3.5" fill="#F0C64A"/>`,`<path d="M66 30 C100 10 150 22 176 46 L160 46 C140 30 100 24 70 36Z" fill="#E77683"/>`+fork(194,62,24,'#E06674'),eye(48,52,7)));}
+  case 'evynnis':{const d=`M30 66 C30 36 60 16 100 18 C140 22 170 40 194 58 L194 66 C170 80 130 96 90 94 C56 92 32 84 30 66 Z`;
+    return wrap(body('ev',d,g('gev','#C9445A','#E58C96','#F8DDE0'),Array.from({length:22},(_,i)=>`<circle cx="${62+(i%8)*14+(Math.floor(i/8)%2)*7}" cy="${36+Math.floor(i/8)*12}" r="2" fill="#4FA3D8"/>`).join(''),`<path d="M70 22 C100 6 150 24 182 50 L172 52 C146 34 110 22 74 28Z" fill="#D45A6C"/><path d="M100 92 C126 98 156 86 180 70 L170 68 C150 80 126 88 102 88Z" fill="#D45A6C"/>`+fork(192,62,26,'#C9445A'),eye(50,50,6.5)));}
+  case 'oval':{const d=`M50 58 C50 46 70 40 120 40 C170 40 200 50 210 58 C200 66 170 76 120 76 C70 76 50 70 50 58 Z`;
+    return wrap(body('ov',d,g('gov','#B98A6E','#E2C2AE','#F4E6DC'),Array.from({length:36},(_,i)=>`<circle cx="${66+(i%12)*12}" cy="${48+Math.floor(i/12)*8}" r="1.5" fill="#8A4E36" opacity=".6"/>`).join(''),
+      `<path d="M56 50 C80 22 180 22 214 56 C180 40 90 40 56 50Z M56 66 C80 94 180 94 214 60 C180 76 90 76 56 66Z" fill="#E9D2C4" opacity=".85" stroke="#B98A6E" stroke-width=".8"/>`+Array.from({length:8},(_,i)=>`<path d="M52 ${54+i*1.2} C36 ${50+i*2} 22 ${44+i*4} 8 ${40+i*6}" stroke="#B98A6E" stroke-width="2.2" fill="none"/>`).join(''),eye(58,56,4.5)));}
+  case 'cuttle':{const d=`M60 58 C60 38 90 30 140 30 C190 30 214 44 214 58 C214 72 190 86 140 86 C90 86 60 78 60 58 Z`;
+    return wrap(body('cu',d,g('gcu','#7A5E4A','#B49A84','#E8DCD0'),Array.from({length:12},(_,i)=>`<path d="M${84+i*10} 34 q6 12 0 24" stroke="#3E2E24" stroke-width="2.4" fill="none" opacity=".7"/>`).join(''),
+      `<path d="M62 52 C80 20 196 18 218 56 C200 26 84 30 62 52Z M62 64 C80 96 196 98 218 60 C200 90 84 86 62 64Z" fill="#D9C6B4" stroke="#7A5E4A" stroke-width=".8"/>`+Array.from({length:8},(_,i)=>`<path d="M62 ${55+i*1} C46 ${52+i*1.5} 34 ${48+i*3} 24 ${46+i*4}" stroke="#9A7C66" stroke-width="2.6" fill="none"/>`).join(''),eye(70,54,5)));}
+  case 'crabB': case 'crab3': case 'crabO':{const blue=k==='crabB',ov=k==='crabO';const c1=blue?'#3D6FA8':ov?'#B98A5A':'#7D7A52',c2=blue?'#6E9BCB':ov?'#E2C49A':'#A7A37A';
+    const legs=[0,1,2].map(i=>`<path d="M${100-i*6} ${66+i*6} L${70-i*10} ${80+i*8} L${56-i*10} ${100}" stroke="${c1}" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M${160+i*6} ${66+i*6} L${190+i*10} ${80+i*8} L${204+i*10} ${100}" stroke="${c1}" stroke-width="4" fill="none" stroke-linecap="round"/>`).join('');
+    const pad=`<path d="M110 86 L96 106 L110 108Z M150 86 L164 106 L150 108Z" fill="${c1}"/>`;
+    const claws=`<path d="M92 52 L60 40 L40 30" stroke="${c1}" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M40 30 L20 22 L26 34 Z M40 30 L18 34 L30 40Z" fill="${c1}"/><path d="M168 52 L200 40 L220 30" stroke="${c1}" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M220 30 L240 22 L234 34 Z M220 30 L242 34 L230 40Z" fill="${c1}"/>`;
+    const d=`M70 54 L20 50 L80 46 C100 36 160 36 180 46 L240 50 L190 54 C186 76 160 90 130 90 C100 90 74 76 70 54 Z`;
+    const marks=ov?Array.from({length:60},(_,i)=>`<circle cx="${84+(i%15)*6.5}" cy="${50+Math.floor(i/15)*9}" r="1.3" fill="#7A3E2A" opacity=".7"/>`).join(''):blue?Array.from({length:16},(_,i)=>`<circle cx="${90+(i%8)*11}" cy="${54+Math.floor(i/8)*12}" r="3" fill="#E8F1FA" opacity=".85"/>`).join(''):`<circle cx="104" cy="70" r="6" fill="#C8322E"/><circle cx="130" cy="74" r="6" fill="#C8322E"/><circle cx="156" cy="70" r="6" fill="#C8322E"/>`;
+    return wrap(body(k,d,g('g'+k,c1,c2,c2),marks,legs+pad+claws,eye(122,44,2.6)+eye(138,44,2.6)));}
+  case 'shrimp': case 'shrimpY':{const yl=k==='shrimpY';const d=`M40 56 C60 36 140 34 180 50 C200 58 210 72 204 86 C196 74 184 68 170 70 C130 74 70 76 40 66 Z`;
+    return wrap(body(k,d,g('g'+k,yl?'#D88A7A':'#B8202A',yl?'#EDB5A6':'#E04A42',yl?'#F6DCD2':'#F28C7E'),(yl?'<ellipse cx="62" cy="52" rx="20" ry="10" fill="#F0B83A" opacity=".8"/>':'')+Array.from({length:6},(_,i)=>`<path d="M${86+i*16} 40 C${90+i*16} 54 ${88+i*16} 66 ${84+i*16} 76" stroke="#8E1820" stroke-width="1.6" fill="none"/>`).join(''),
+      `<path d="M44 50 C20 30 10 18 4 10 M46 52 C30 46 18 46 2 54" stroke="#C4302E" stroke-width="1.6" fill="none"/><path d="M40 52 L14 44 L40 48Z" fill="#C4302E"/>`+Array.from({length:5},(_,i)=>`<path d="M${70+i*16} 72 l-4 18" stroke="#C4302E" stroke-width="2" stroke-linecap="round"/>`).join('')+`<path d="M200 82 L226 96 L212 100 L196 92Z" fill="#B8202A"/>`,eye(52,52,4)));}
+  case 'grunt':{const d=tor(24,198,60,24,22);
+    return wrap(body('gr',d,g('ggr','#6B5A3A','#A8977A','#E8E2D4'),[44,56,68].map(y=>`<path d="M30 ${y} C90 ${y-6} 150 ${y-2} 198 ${y+(60-y)*.6}" stroke="#E2C25A" stroke-width="3" fill="none" opacity=".85"/>`).join(''),`<path d="M74 40 C100 28 140 30 172 48 L164 50 C140 40 104 36 76 44Z M122 80 L138 92 L152 78Z" fill="#7A6844"/>`+fork(196,60,22,'#7A6844'),eye(40,55,5.5)));}
+  case 'filef':{const d=`M28 60 C30 40 70 24 120 24 C160 24 186 44 196 56 L196 64 C186 76 160 96 120 96 C70 96 30 80 28 60 Z`;
+    return wrap(body('ff',d,g('gff','#6E7C86','#A9B4BA','#DDE3E6'),Array.from({length:20},(_,i)=>`<circle cx="${60+(i%10)*12}" cy="${46+Math.floor(i/10)*22}" r="3" fill="#56636C" opacity=".45"/>`).join(''),
+      `<path d="M84 28 L80 2 L92 26Z" fill="#3E4A52"/><path d="M118 26 C150 20 178 34 192 52 L182 54 C168 40 146 30 120 32Z M118 94 C150 100 178 86 192 68 L182 66 C168 80 146 90 120 88Z" fill="#4E86B8"/><path d="M194 54 C206 46 220 46 230 50 L230 70 C220 74 206 74 194 66Z" fill="#4E86B8"/>`,eye(64,52,5)+`<path d="M28 60 L22 60" stroke="#2B3A40" stroke-width="2"/>`));}
+  case 'plag':{const c1='#5A3A2E',c2='#8C5E48';
+    const legs=[0,1,2,3].map(i=>`<path d="M${104-i*6} ${60+i*7} L${70-i*8} ${66+i*12} L${54-i*8} ${84+i*8}" stroke="${c1}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M${156+i*6} ${60+i*7} L${190+i*8} ${66+i*12} L${206+i*8} ${84+i*8}" stroke="${c1}" stroke-width="5" fill="none" stroke-linecap="round"/>`).join('');
+    const claws=`<path d="M106 46 L88 34 L80 30" stroke="${c1}" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="74" cy="28" rx="9" ry="6" fill="#E9E4DA"/><path d="M154 46 L172 34 L180 30" stroke="${c1}" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="186" cy="28" rx="9" ry="6" fill="#E9E4DA"/>`;
+    const d=`M100 42 C110 34 150 34 160 42 C172 52 172 76 160 84 C150 92 110 92 100 84 C88 76 88 52 100 42 Z`;
+    const marks=Array.from({length:24},(_,i)=>`<path d="M${100+(i%6)*11} ${46+Math.floor(i/6)*11} q4 -3 8 0" stroke="#3A2620" stroke-width="1.6" fill="none"/>`).join('');
+    return wrap(body('pg',d,g('gpg',c1,c2,c2),marks,legs+claws,eye(122,40,2.6)+eye(138,40,2.6)));}
+  case 'sail':{const d=tor(36,200,66,18,18);
+    return wrap(body('sl',d,g('gsl','#163A6A','#4C76A6','#EEF2F6'),Array.from({length:9},(_,i)=>`<path d="M${70+i*13} 52 v28" stroke="#9EC1E6" stroke-width="2" stroke-dasharray="3 3"/>`).join(''),
+     `<path d="M2 64 L40 62 L40 66Z" fill="#163A6A"/><path d="M58 52 C70 0 140 -2 176 52 Z" fill="#23497C"/>`+Array.from({length:14},(_,i)=>`<circle cx="${80+i*7}" cy="${30+Math.abs(i-6)*1.8}" r="1.8" fill="#0D2546"/>`).join('')+fork(198,66,30,'#163A6A'),eye(52,62,4.5)));}
+  case 'marlin':{const d=tor(36,200,62,22,20);
+    return wrap(body('ml',d,g('gml','#14305A','#3E6595','#EAF0F5'),Array.from({length:12},(_,i)=>`<path d="M${62+i*11} 44 v36" stroke="#8FB9E6" stroke-width="2.2"/>`).join(''),`<path d="M2 60 L40 58 L40 63Z" fill="#14305A"/><path d="M58 44 L66 18 L90 40Z" fill="#1E4378"/><path d="M80 80 L96 98 L102 80Z" fill="#1E4378"/>`+fork(198,62,32,'#14305A'),eye(52,58,4.5)));}
+  case 'skip':{const d=`M24 60 C40 28 120 26 196 56 L196 64 C120 94 40 92 24 60 Z`;
+    return wrap(body('sk',d,g('gsk','#24325A','#7C8DAE','#F1F2F5'),Array.from({length:4},(_,i)=>`<path d="M60 ${66+i*6} C110 ${68+i*6} 160 ${66+i*4} 196 ${62+i*2}" stroke="#2A3550" stroke-width="2.6" fill="none"/>`).join(''),`<path d="M90 32 L100 16 L116 30Z" fill="#2A3550"/>`+Array.from({length:6},(_,i)=>`<path d="M${130+i*10} ${33+i*3} l4 -5 l2 6Z" fill="#E7C64A"/>`).join('')+fork(194,60,32,'#2A3550'),eye(40,56,5)));}
+  case 'mahi':{const d=`M24 66 C20 36 34 24 60 26 C120 30 170 46 198 58 L198 64 C160 80 100 94 54 90 C34 88 26 80 24 66 Z`;
+    return wrap(body('mh',d,g('gmh','#1F8A6E','#7BC85A','#F2E266'),Array.from({length:18},(_,i)=>`<circle cx="${50+(i%9)*16}" cy="${46+Math.floor(i/9)*16+(i%2)*4}" r="2" fill="#1A4F86"/>`).join(''),`<path d="M40 26 C90 6 160 30 194 54 L190 56 C150 36 100 22 44 30Z" fill="#1D6FA5"/>`+fork(196,61,28,'#3AA0B8'),eye(40,58,5)));}
+  case 'squid':{const d=`M40 58 C40 46 60 42 150 46 L198 58 L150 70 C60 74 40 70 40 58 Z`;
+    return wrap(body('sq',d,g('gsq','#C98B7A','#E9C3B6','#F6E8E2'),Array.from({length:30},(_,i)=>`<circle cx="${60+(i%10)*13}" cy="${50+Math.floor(i/10)*7}" r="1.6" fill="#9C4A3A" opacity=".7"/>`).join(''),
+      `<path d="M150 46 L200 34 L210 58 L200 82 L150 70Z" fill="#DDAA9A" opacity=".85"/>`+Array.from({length:8},(_,i)=>`<path d="M42 ${54+i*1.3} C26 ${50+i*2} 14 ${44+i*4} 4 ${40+i*6}" stroke="#C98B7A" stroke-width="2.2" fill="none"/>`).join(''),eye(48,56,4)));}
+  case 'flying':{const d=tor(30,196,64,16,15);
+    return wrap(body('fl',d,g('gfl','#1D3F6E','#6E95C2','#F0F3F7'),'',`<path d="M70 58 C100 10 170 14 200 26 C160 34 120 48 90 62Z" fill="#7FA8D6" opacity=".85" stroke="#1D3F6E" stroke-width="1"/><path d="M120 76 C140 92 160 96 176 94 C160 86 146 80 130 74Z" fill="#7FA8D6"/><path d="M193 60 L222 44 L210 62 L238 90 L193 68Z" fill="#1D3F6E"/>`,eye(42,61,4.5)));}
+  case 'dolph':{const d=`M14 64 L40 60 C60 44 130 38 196 56 L200 62 C150 82 70 82 40 70 L14 66Z`;
+    return wrap(body('dp',d,g('gdp','#4A5966','#8D9AA5','#E8ECEF'),`<path d="M50 70 C100 60 150 62 196 60" stroke="#C9D1D7" stroke-width="5" fill="none" opacity=".7"/>`,`<path d="M108 44 C112 26 124 18 136 16 C128 28 128 40 132 46Z" fill="#4A5966"/><path d="M80 72 C88 86 98 92 106 92 C100 84 98 78 98 72Z" fill="#5B6A76"/><path d="M196 56 C210 44 226 40 240 40 C230 50 226 56 222 60 C226 66 232 74 240 82 C224 80 208 74 198 64Z" fill="#4A5966"/>`,eye(52,59,3)));}
+  }
+  return '';
+}
+function showFish(el,sheet){
+  const k=el.dataset.k, row=FISH.find(x=>x[3]===k); if(!row) return;
+  const pop=$('fishPop');
+  $('fpFig').innerHTML=fishArt(k); $('fpName').textContent=row[0]+(row[6]?'（'+row[6]+'）':''); $('fpLat').textContent=row[4]+' · 示意插畫'; $('fpDesc').textContent=row[2]; $('fpLnk').href=photoUrl(row[4]);
+  pop.classList.toggle('sheet',sheet); pop.hidden=false; $('fishBack').hidden=!sheet;
+  if(!sheet){const r=el.getBoundingClientRect(), w=Math.min(300,innerWidth-32);
+    let left=Math.min(Math.max(16,r.left),innerWidth-w-16), top=r.bottom+8; const h=pop.offsetHeight||200;
+    if(top+h>innerHeight-8) top=Math.max(8,r.top-h-8);
+    pop.style.left=left+'px'; pop.style.top=top+'px';}
+  else $('fishX').focus();
+}
+function hideFish(){ $('fishPop').hidden=true; $('fishBack').hidden=true; }
+function bindFish(){
+  const sel='[data-k]';
+  if(HOVER){
+    document.addEventListener('mouseover',e=>{const el=e.target.closest&&e.target.closest(sel);if(el&&!el.contains(e.relatedTarget))showFish(el,false);});
+    document.addEventListener('mouseout',e=>{const el=e.target.closest&&e.target.closest(sel);if(el&&!el.contains(e.relatedTarget))hideFish();});
+    document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest(sel);if(el)showFish(el,false);});
+    document.addEventListener('focusout',e=>{if(e.target.closest&&e.target.closest(sel))hideFish();});
+    window.addEventListener('scroll',hideFish,{passive:true});
+  }
+  document.addEventListener('click',e=>{if(e.target.closest('a'))return;const el=e.target.closest&&e.target.closest(sel);if(el&&!HOVER)showFish(el,true);});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')hideFish();if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches(sel)&&!HOVER){e.preventDefault();showFish(e.target,true);}});
+  $('fishX').onclick=hideFish; $('fishBack').onclick=hideFish;
+}
+const CATS=['魚類','頭足類','蝦蟹類'];
+function renderFish(){
+  const mi=Number(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei',month:'numeric'}))-1;
+  $('fishTitle').textContent=(mi+1)+' 月可能遇見的海洋生物';
+  const now=FISH.filter(x=>x[1][mi]>0).sort((a,b)=>CATS.indexOf(a[5])-CATS.indexOf(b[5])||b[1][mi]-a[1][mi]);
+  $('fishCards').innerHTML=now.map(([n,l,d,k,la,c,o])=>`<div class="fish ${l[mi]===1?'l1':''}" data-k="${k}" tabindex="0" role="button" aria-label="${n} 圖鑑"><span class="cat">${c}</span><h3>${n}</h3><span class="sci">${o?o+' · ':''}<i>${la}</i></span><span class="lbl">${l[mi]===2?'盛產期':'可見'} · <span class="hint"></span></span><p>${d}</p><div class="more"><a href="${photoUrl(la)}" target="_blank" rel="noopener">看實際照片 ↗</a></div></div>`).join('');
+  document.querySelectorAll('.hint').forEach(e=>e.textContent=HOVER?'滑過看圖':'點一下看圖');
+  let t='<table><thead><tr><th>物種</th>'+Array.from({length:12},(_,i)=>`<th class="${i===mi?'now':''}">${i+1}月</th>`).join('')+'</tr></thead><tbody>';
+  CATS.forEach(c=>{t+=`<tr class="catrow"><td colspan="13">${c}</td></tr>`;FISH.filter(x=>x[5]===c).forEach(([n,l,d,k,la,cc,o])=>{t+=`<tr><td><span class="fname" data-k="${k}" tabindex="0">${n}</span><span class="sci">${o||''} <i>${la}</i></span></td>`+l.map((v,i)=>`<td class="${i===mi?'now':''}"><span class="dot l${v}" title="${['少見','可見','盛產期'][v]}"></span></td>`).join('')+'</tr>';});});
+  $('fishCal').innerHTML=t+'</tbody></table>';
+}
+renderFish(); bindFish(); render();
+setInterval(render,600000);
+
+/* ---------- auto fetch ---------- */
+let busy=false;
+async function getJSON(url){
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),20000);
+  try{const r=await fetch(url,{signal:ctl.signal,cache:'no-store'}); const j=await r.json(); if(!r.ok||j.error) throw new Error(j.reason||('HTTP '+r.status)); return j;}
+  finally{clearTimeout(t);}
+}
+async function autoFetch(){
+  if(busy) return; busy=true;
+  const st=$('autoSt'), btn=$('btnRefresh'); st.className='st'; st.textContent='正在取得最新海象與天氣資料…'; btn.disabled=true;
+  const [m,w]=await Promise.allSettled([getJSON(MARINE_URL),getJSON(WX_URL)]);
+  const fails=[];
+  if(m.status==='fulfilled'&&kindOf(m.value)==='marine'){if(store.get('gs_demo'))['gs_marine','gs_wx','gs_demo'].forEach(store.del);store.set('gs_marine',m.value);} else fails.push('海象');
+  if(w.status==='fulfilled'&&kindOf(w.value)==='wx'){store.set('gs_wx',w.value);} else fails.push('天氣');
+  if(!fails.length){st.className='st ok';st.textContent='✓ 已自動更新（'+fmtT(new Date())+'）';}
+  else{
+    const have=store.get('gs_marine')&&store.get('gs_wx');
+    st.className='st old';st.textContent='⚠ '+fails.join('、')+'資料取得失敗'+(have?'，目前顯示上次的資料':'，請稍後再按「立即重新整理」，或展開下方手動更新');
+    if(!have){$('gateHead').textContent='⚠ 無法自動取得資料';$('gateBody').textContent='可能是網路連線受限。請稍後按「立即重新整理」，或展開「手動更新資料」貼上資料。';$('manualBox').open=true;}
+  }
+  btn.disabled=false; busy=false; render();
+}
+$('btnRefresh').onclick=autoFetch;
+autoFetch();
+setInterval(autoFetch,30*60*1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){const c=store.get('gs_marine');const f=c&&(Array.isArray(c)?c[0]:c).current;if(!f||(Date.now()-tp(f.time))>45*60*1000)autoFetch();}});
+})();
+</script>
+</body>
+</html>
