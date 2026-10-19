@@ -61,7 +61,10 @@ svg text{fill:var(--muted);font-family:var(--f-data);font-size:10px}
 .cal{overflow-x:auto}
 .cal table{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}
 .cal th,.cal td{padding:6px 4px;text-align:center;border-bottom:1px solid var(--line)}
-.cal th:first-child,.cal td:first-child{text-align:left;padding-left:0;white-space:nowrap}
+.cal th:first-child,.cal td:first-child{text-align:left;padding-left:0;padding-right:10px}
+.cal tbody tr:not(.catrow) td:first-child,.cal thead th:first-child{position:sticky;left:0;z-index:2;background:var(--paper);box-shadow:1px 0 0 var(--line);min-width:8.5em;max-width:11em}
+@media (max-width:480px){.cal tbody tr:not(.catrow) td:first-child,.cal thead th:first-child{min-width:7em;max-width:8.5em}.cal td .sci{font-size:10px}}
+.cal tr.catrow td .catlbl{position:sticky;left:0;display:inline-block;background:var(--paper);padding-right:8px}
 .cal th.now{color:var(--ink);font-weight:700;border-bottom:2px solid var(--sulfur)}
 .cal td.now{background:color-mix(in srgb,var(--sulfur) 12%,transparent)}
 .dot{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle}
@@ -436,6 +439,7 @@ function render(){
     const age=(now-tp(c.time))/3600e3;el.className='st '+(demo?'':age>3?'old':'ok');
     el.textContent=demo?'目前是範例資料':(age>3?'⚠ 資料已過 '+Math.round(age)+' 小時，請重新更新':'✓ 已更新（資料時間 '+fmtT(tp(c.time))+'）');});
   renderRoute(pick(Wd,1),pick(M,1));
+  if(open) requestAnimationFrame(scrollCalToNow);
   renderMap();
   $('demoBanner').hidden=!demo;
   const cur=m&&m.current, wc=w&&w.current;
@@ -727,6 +731,11 @@ function bindFish(){
 const CATS=['魚類','頭足類','蝦蟹類'];
 let fishMonth=-1;
 function curMonth(){return Number(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei',month:'numeric'}))-1;}
+let calScrolled=false;
+function scrollCalToNow(){ if(calScrolled) return; const box=$('fishCal'); if(!box||box.offsetParent===null) return;
+  const th=box.querySelector('th.now'),f=box.querySelector('thead th'); if(!th||!f) return;
+  if(box.scrollWidth>box.clientWidth) box.scrollLeft=Math.max(0,th.offsetLeft-f.offsetWidth-th.offsetWidth*2);
+  calScrolled=true; }
 function renderFish(){
   const mi=curMonth(); fishMonth=mi;
   $('fishTitle').textContent=(mi+1)+' 月可能遇見的海洋生物';
@@ -734,8 +743,9 @@ function renderFish(){
   $('fishCards').innerHTML=now.map(([n,l,d,k,la,c,o])=>`<div class="fish ${l[mi]===1?'l1':''}" data-k="${k}" tabindex="0" role="button" aria-label="${n} 圖鑑"><span class="cat">${c}</span><h3>${n}</h3><span class="sci">${o?o+' · ':''}<i>${la}</i></span><span class="lbl">${l[mi]===2?'盛產期':'可見'} · <span class="hint"></span></span><p>${d}</p><div class="more"><a href="${photoUrl(la)}" target="_blank" rel="noopener">看實際照片 ↗</a></div></div>`).join('');
   document.querySelectorAll('.hint').forEach(e=>e.textContent=HOVER?'滑過看圖':'點一下看圖');
   let t='<table><thead><tr><th>物種</th>'+Array.from({length:12},(_,i)=>`<th class="${i===mi?'now':''}">${i+1}月</th>`).join('')+'</tr></thead><tbody>';
-  CATS.forEach(c=>{t+=`<tr class="catrow"><td colspan="13">${c}</td></tr>`;FISH.filter(x=>x[5]===c).forEach(([n,l,d,k,la,cc,o])=>{t+=`<tr><td><span class="fname" data-k="${k}" tabindex="0">${n}</span><span class="sci">${o||''} <i>${la}</i></span></td>`+l.map((v,i)=>`<td class="${i===mi?'now':''}"><span class="dot l${v}" title="${['少見','可見','盛產期'][v]}"></span></td>`).join('')+'</tr>';});});
+  CATS.forEach(c=>{t+=`<tr class="catrow"><td colspan="13"><span class="catlbl">${c}</span></td></tr>`;FISH.filter(x=>x[5]===c).forEach(([n,l,d,k,la,cc,o])=>{t+=`<tr><td><span class="fname" data-k="${k}" tabindex="0">${n}</span><span class="sci">${o||''} <i>${la}</i></span></td>`+l.map((v,i)=>`<td class="${i===mi?'now':''}"><span class="dot l${v}" title="${['少見','可見','盛產期'][v]}"></span></td>`).join('')+'</tr>';});});
   $('fishCal').innerHTML=t+'</tbody></table>';
+  calScrolled=false; requestAnimationFrame(scrollCalToNow);
 }
 renderFish(); bindFish(); render();
 setInterval(()=>{if(curMonth()!==fishMonth)renderFish();},60000);
