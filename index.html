@@ -138,6 +138,22 @@ input[type=range]{width:100%;accent-color:var(--sulfur)}
 details#manualBox>summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
 details#manualBox[open]>summary{margin-bottom:10px}
 .lunar{color:var(--ink);font-weight:500}
+.arbtn{margin-left:auto;font-weight:500;background:var(--sea);border-color:var(--sea);color:#fff}
+#ar{position:fixed;inset:0;z-index:60;background:#05141A;color:#F2F7F7;overflow:hidden;font-family:var(--f-body);touch-action:none}
+#ar video,#ar canvas{position:absolute;inset:0;width:100%;height:100%}
+#ar video{object-fit:cover}
+#ar .arTop,#ar .arBot{position:absolute;left:0;right:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+#ar .arTop{top:0;padding-top:calc(10px + env(safe-area-inset-top,0px));justify-content:space-between}
+#ar .arBot{bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));padding-top:10px;display:grid;gap:6px;background:linear-gradient(transparent,rgba(3,14,18,.82) 30%)}
+#ar button{font:inherit;font-size:14px;padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.55);background:rgba(3,14,18,.55);color:#fff;cursor:pointer}
+#ar button[aria-pressed="true"]{background:#fff;color:#05141A}
+#ar .arSeg{display:inline-flex;gap:0}#ar .arSeg button{border-radius:0}#ar .arSeg button:first-child{border-radius:999px 0 0 999px}#ar .arSeg button:last-child{border-radius:0 999px 999px 0}
+#ar .arRow{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;text-shadow:0 1px 2px #000}
+#ar .arRow b{font-family:var(--f-data);font-weight:600}
+#ar .sw{display:inline-block;width:18px;height:4px;border-radius:2px;vertical-align:middle;margin-right:6px}
+#ar .arMsg{font-size:13px;color:#FFE08A;text-shadow:0 1px 2px #000}
+#ar .arMsg:empty{display:none}
 .banner{background:color-mix(in srgb,var(--sulfur) 18%,var(--paper));border:1px solid var(--sulfur);border-radius:6px;padding:10px 14px;font-size:13px}
 footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -203,6 +219,7 @@ footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
 <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
   <span class="lbl">觀測點</span>
   <div class="seg" role="group" aria-label="切換觀測點"><button id="loc0" aria-pressed="true">石城漁港（母港）</button><button id="loc1" aria-pressed="false">龜山島海域</button></div>
+  <button id="btnAR" class="arbtn" aria-haspopup="dialog">◎ 開啟 AR 方位</button>
 </div>
 
 <div class="banner" id="demoBanner" hidden>目前顯示的是<b>範例資料</b>，用來預覽版面，不代表實際海況。按上方「立即重新整理」即可換成實際資料。</div>
@@ -299,6 +316,21 @@ footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
 
 <div id="fishBack" hidden></div>
 <div class="fishpop" id="fishPop" hidden role="dialog" aria-label="海洋生物圖鑑"><button class="ghost x" id="fishX">關閉</button><figure id="fpFig"></figure><b id="fpName"></b><i id="fpLat"></i><p id="fpDesc"></p><a class="btn ghost lnk" id="fpLnk" target="_blank" rel="noopener">看實際照片 ↗</a></div>
+
+<div id="ar" role="dialog" aria-modal="true" aria-label="AR 方位箭頭" hidden>
+  <video id="arVid" playsinline muted autoplay></video>
+  <canvas id="arCv"></canvas>
+  <div class="arTop">
+    <button id="arClose">✕ 關閉</button>
+    <div class="arSeg" role="group" aria-label="顯示模式"><button id="arCam" aria-pressed="true">相機</button><button id="arCmp" aria-pressed="false">指南針</button></div>
+  </div>
+  <div class="arBot">
+    <div class="arRow"><span><span class="sw" style="background:#FFFFFF"></span>風 <b id="arWind">—</b></span></div>
+    <div class="arRow"><span><span class="sw" style="background:#4FE3CF"></span>海流 <b id="arCur">—</b></span></div>
+    <div class="arRow" style="font-size:12px;opacity:.85"><span id="arMeta">—</span></div>
+    <div class="arMsg" id="arMsg"></div>
+  </div>
+</div>
 
 <footer>
   <span style="color:var(--ink);font-size:13px">作者：Nicholas Li</span>
@@ -751,6 +783,125 @@ renderFish(); bindFish(); render();
 setInterval(()=>{if(curMonth()!==fishMonth)renderFish();},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&curMonth()!==fishMonth)renderFish();});
 setInterval(render,600000);
+
+/* ---------- AR 方位 ---------- */
+const AR={on:false,mode:'cam',head:null,shown:null,raf:0,stream:null,src:'',acc:null,lock:null};
+const DECL=-4.7; // 台灣東北部磁偏角約 4.7°W：真北 = 磁北 + DECL
+const wrap180=a=>((a%360)+540)%360-180;
+function arData(){
+  const li=store.get('gs_loc')||0, pk=(d,i)=>!d?null:Array.isArray(d)?(d[i]||d[0]):d;
+  const m=pk(store.get('gs_marine'),li), w=pk(store.get('gs_wx'),li);
+  return {li, mc:m&&m.current, wc:w&&w.current};
+}
+function camHeading(a,b,g){ // 後鏡頭朝向（磁北起算，順時針）
+  const d=Math.PI/180,x=b*d,y=g*d,z=a*d,cX=Math.cos(x),cY=Math.cos(y),cZ=Math.cos(z),sX=Math.sin(x),sY=Math.sin(y),sZ=Math.sin(z);
+  const Vx=-cZ*sY-sZ*sX*cY, Vy=-sZ*sY+cZ*sX*cY; let h=Math.atan(Vx/Vy);
+  if(Vy<0)h+=Math.PI; else if(Vx<0)h+=2*Math.PI; return h*180/Math.PI;
+}
+function onOri(e){
+  let h=null;
+  if(typeof e.webkitCompassHeading==='number'&&!isNaN(e.webkitCompassHeading)){
+    h=e.webkitCompassHeading+((screen.orientation&&screen.orientation.angle)||window.orientation||0);
+    AR.acc=e.webkitCompassAccuracy; AR.src='ios';
+  } else if(e.absolute&&e.alpha!=null&&e.beta!=null){ h=camHeading(e.alpha,e.beta,e.gamma||0); AR.src='abs'; }
+  if(h==null) return;
+  AR.head=((h+DECL)%360+360)%360;
+}
+async function openAR(){
+  const msg=$('arMsg'); msg.textContent='';
+  try{ if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+      const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted') msg.textContent='沒有取得方位權限，箭頭會以北方朝上顯示。可到設定允許動作與方向存取後再試。'; } }catch(e){}
+  if('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute',onOri);
+  window.addEventListener('deviceorientation',onOri);
+  window.addEventListener('compassneedscalibration',calHint);
+  $('ar').hidden=false; document.body.style.overflow='hidden'; AR.on=true; AR.head=null; AR.shown=null;
+  try{AR.lock=await navigator.wakeLock.request('screen');}catch(e){}
+  setMode(AR.mode);
+  setTimeout(()=>{ if(AR.on&&AR.head==null&&!msg.textContent) msg.textContent='讀不到手機方位（電腦或不支援的瀏覽器），箭頭以北方朝上顯示。'; },2500);
+  loop();
+}
+function calHint(){ $('arMsg').textContent='指南針需要校正：把手機在空中畫幾次「8」字。'; }
+async function setMode(mode){
+  AR.mode=mode; $('arCam').setAttribute('aria-pressed',String(mode==='cam')); $('arCmp').setAttribute('aria-pressed',String(mode==='cmp'));
+  const v=$('arVid');
+  if(mode==='cam'&&!AR.stream){
+    try{ AR.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); v.srcObject=AR.stream; v.hidden=false; await v.play().catch(()=>{}); }
+    catch(e){ $('arMsg').textContent='無法開啟相機，已改用指南針模式。'; mode='cmp'; AR.mode='cmp'; $('arCam').setAttribute('aria-pressed','false'); $('arCmp').setAttribute('aria-pressed','true'); }
+  }
+  if(mode==='cmp'){ stopCam(); v.hidden=true; }
+}
+function stopCam(){ if(AR.stream){AR.stream.getTracks().forEach(t=>t.stop());AR.stream=null;} $('arVid').srcObject=null; }
+function closeAR(){
+  AR.on=false; cancelAnimationFrame(AR.raf); stopCam(); $('ar').hidden=true; document.body.style.overflow='';
+  window.removeEventListener('deviceorientationabsolute',onOri); window.removeEventListener('deviceorientation',onOri); window.removeEventListener('compassneedscalibration',calHint);
+  try{AR.lock&&AR.lock.release();}catch(e){} AR.lock=null; $('btnAR').focus();
+}
+function arrow(c,x1,y1,x2,y2,col,w){
+  const a=Math.atan2(y2-y1,x2-x1),hl=w*3.2;
+  c.lineCap='round'; c.lineJoin='round';
+  for(const [st,lw] of [['rgba(0,0,0,.55)',w+5],[col,w]]){
+    c.strokeStyle=st; c.lineWidth=lw; c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2-Math.cos(a)*hl*.6,y2-Math.sin(a)*hl*.6); c.stroke();
+    c.fillStyle=st; c.beginPath(); c.moveTo(x2+Math.cos(a)*(lw-w)/2,y2+Math.sin(a)*(lw-w)/2);
+    c.lineTo(x2-Math.cos(a-0.45)*(hl+(lw-w)),y2-Math.sin(a-0.45)*(hl+(lw-w))); c.lineTo(x2-Math.cos(a+0.45)*(hl+(lw-w)),y2-Math.sin(a+0.45)*(hl+(lw-w))); c.closePath(); c.fill();
+  }
+}
+function pill(c,x,y,t,col){
+  c.font='600 14px '+getComputedStyle(document.body).fontFamily; const w=c.measureText(t).width+16;
+  c.fillStyle='rgba(3,14,18,.72)'; c.beginPath(); c.roundRect?c.roundRect(x-w/2,y-13,w,26,13):c.rect(x-w/2,y-13,w,26); c.fill();
+  c.fillStyle=col; c.textAlign='center'; c.textBaseline='middle'; c.fillText(t,x,y+1);
+}
+function loop(){
+  if(!AR.on) return; AR.raf=requestAnimationFrame(loop);
+  const cv=$('arCv'), dpr=Math.min(2,window.devicePixelRatio||1), W=cv.clientWidth, H=cv.clientHeight;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);}
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,H);
+  if(AR.mode==='cmp'){ const g=c.createRadialGradient(W/2,H*.62,10,W/2,H*.62,Math.max(W,H)); g.addColorStop(0,'#0F3A48'); g.addColorStop(1,'#05141A'); c.fillStyle=g; c.fillRect(0,0,W,H); }
+  const target=AR.head==null?0:AR.head;
+  AR.shown=AR.shown==null?target:((AR.shown+wrap180(target-AR.shown)*0.18)%360+360)%360;
+  const hd=AR.shown, {mc,wc}=arData();
+  // 地平線方位刻度（相機水平視角約 60°）
+  const fov=AR.mode==='cam'?60:90, ty=Math.max(70,H*.16)+ (parseFloat(getComputedStyle($('ar').querySelector('.arTop')).paddingTop)||0)*0;
+  const pxd=W/fov; c.save();
+  c.fillStyle='rgba(3,14,18,.45)'; c.fillRect(0,ty-26,W,52);
+  c.strokeStyle='rgba(255,255,255,.85)'; c.fillStyle='#fff'; c.textAlign='center'; c.textBaseline='alphabetic'; c.font='600 13px '+getComputedStyle(document.body).fontFamily;
+  const NAMES={0:'北',45:'東北',90:'東',135:'東南',180:'南',225:'西南',270:'西',315:'西北'};
+  for(let d=Math.floor((hd-fov/2-5)/5)*5; d<=hd+fov/2+5; d+=5){
+    const x=W/2+wrap180(d-hd)*pxd, dd=((d%360)+360)%360, big=dd%45===0;
+    c.lineWidth=big?2:1; c.beginPath(); c.moveTo(x,ty+(big?4:12)); c.lineTo(x,ty+20); c.stroke();
+    if(big) c.fillText(NAMES[dd],x,ty-6); else if(dd%15===0){c.font='11px '+getComputedStyle(document.body).fontFamily;c.fillText(dd,x,ty-6);c.font='600 13px '+getComputedStyle(document.body).fontFamily;}
+  }
+  // 地平線上的目標標記：風從哪裡來、海流往哪裡去
+  const marks=[];
+  if(wc&&wc.wind_direction_10m!=null) marks.push([wc.wind_direction_10m,'風從這來','#FFFFFF']);
+  if(mc&&mc.ocean_current_direction!=null) marks.push([mc.ocean_current_direction,'流往這去','#4FE3CF']);
+  marks.forEach(([b,t,col],i)=>{ const r=wrap180(b-hd), off=Math.abs(r)>fov/2-4;
+    const x=off?(r<0?26:W-26):W/2+r*pxd, y=ty+44+i*30;
+    c.fillStyle=col; c.beginPath(); c.moveTo(x,ty+22); c.lineTo(x-7,ty+32); c.lineTo(x+7,ty+32); c.fill();
+    pill(c,Math.min(W-60,Math.max(60,x)),y,off?(r<0?'◀ ':'')+t+(r>0?' ▶':''):t,col); });
+  c.fillStyle='#FFD45A'; c.beginPath(); c.moveTo(W/2,ty+24); c.lineTo(W/2-8,ty+36); c.lineTo(W/2+8,ty+36); c.fill();
+  c.restore();
+  // 海面上的羅盤盤面與箭頭（透視）
+  const cx=W/2, cy=H*0.64, R=Math.min(W*0.44,H*0.34), k=AR.mode==='cam'?0.42:0.62;
+  const P=(bear,rad)=>{const r=(bear-hd)*Math.PI/180;return [cx+Math.sin(r)*rad*R, cy-Math.cos(r)*rad*R*k];};
+  c.save(); c.strokeStyle='rgba(255,255,255,.55)'; c.lineWidth=1.5; c.beginPath(); c.ellipse(cx,cy,R,R*k,0,0,Math.PI*2); c.stroke();
+  c.setLineDash([3,6]); c.beginPath(); c.ellipse(cx,cy,R*.6,R*.6*k,0,0,Math.PI*2); c.stroke(); c.setLineDash([]);
+  c.font='600 14px '+getComputedStyle(document.body).fontFamily; c.textAlign='center'; c.textBaseline='middle';
+  [[0,'N'],[90,'E'],[180,'S'],[270,'W']].forEach(([b,t])=>{const [x,y]=P(b,1.12); c.fillStyle=b===0?'#FF6B5A':'rgba(255,255,255,.85)'; c.fillText(t,x,y);});
+  c.restore();
+  if(wc&&wc.wind_direction_10m!=null){ const to=wc.wind_direction_10m+180, [x1,y1]=P(to+180,0.95), [x2,y2]=P(to,0.95); arrow(c,x1,y1,x2,y2,'#FFFFFF',9); pill(c,x2,y2+(y2<cy?-22:22),'風 '+f(wc.wind_speed_10m,0)+' 節','#FFFFFF'); }
+  if(mc&&mc.ocean_current_direction!=null){ const to=mc.ocean_current_direction, [x1,y1]=P(to+180,0.55), [x2,y2]=P(to,0.55); arrow(c,x1,y1,x2,y2,'#4FE3CF',7); pill(c,x2,y2+(y2<cy?-22:22),'流 '+f(mc.ocean_current_velocity/1.852,1)+' 節','#4FE3CF'); }
+  c.fillStyle='#FFD45A'; c.beginPath(); c.arc(cx,cy,4,0,Math.PI*2); c.fill();
+  // 文字
+  if(!loop.t||performance.now()-loop.t>500){ loop.t=performance.now(); const {li}=arData();
+    $('arWind').textContent=wc?`${dirName(wc.wind_direction_10m)} 吹來 · ${f(wc.wind_speed_10m,0)} 節（${beaufort(wc.wind_speed_10m||0).b} 級）`:'—';
+    $('arCur').textContent=mc?`流向 ${dirName(mc.ocean_current_direction)} · ${f(mc.ocean_current_velocity/1.852,1)} 節`:'—';
+    $('arMeta').textContent=`手機朝向 ${AR.head==null?'—（北方朝上）':dirName(hd)} · ${LOCS[li].n} · 資料 ${wc?fmtT(tp(wc.time)):'—'}`+(AR.acc!=null&&AR.acc>25?` · 指南針誤差約 ±${Math.round(AR.acc)}°`:'');
+  }
+}
+$('btnAR').onclick=openAR; $('arClose').onclick=closeAR;
+$('arCam').onclick=()=>setMode('cam'); $('arCmp').onclick=()=>setMode('cmp');
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&AR.on)closeAR();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&AR.on)closeAR();});
 
 /* ---------- auto fetch ---------- */
 let busy=false;
