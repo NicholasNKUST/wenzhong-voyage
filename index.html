@@ -327,6 +327,7 @@ footer{font-size:12px;color:var(--muted);display:grid;gap:4px}
   <div class="arBot">
     <div class="arRow"><span><span class="sw" style="background:#FFFFFF"></span>風 <b id="arWind">—</b></span></div>
     <div class="arRow"><span><span class="sw" style="background:#4FE3CF"></span>海流 <b id="arCur">—</b></span></div>
+    <div class="arRow"><span><span class="sw" style="background:#FFB547"></span>龜山島 <b id="arIsl">—</b></span></div>
     <div class="arRow" style="font-size:12px;opacity:.85"><span id="arMeta">—</span></div>
     <div class="arMsg" id="arMsg"></div>
   </div>
@@ -785,7 +786,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&curMonth(
 setInterval(render,600000);
 
 /* ---------- AR 方位 ---------- */
-const AR={on:false,mode:'cam',head:null,shown:null,raf:0,stream:null,src:'',acc:null,lock:null};
+const AR={on:false,mode:'cam',head:null,shown:null,raf:0,stream:null,src:'',acc:null,lock:null,pos:null,geoId:null,geoErr:null};
 const DECL=-4.7; // 台灣東北部磁偏角約 4.7°W：真北 = 磁北 + DECL
 const wrap180=a=>((a%360)+540)%360-180;
 function arData(){
@@ -814,7 +815,10 @@ async function openAR(){
   if('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute',onOri);
   window.addEventListener('deviceorientation',onOri);
   window.addEventListener('compassneedscalibration',calHint);
-  $('ar').hidden=false; document.body.style.overflow='hidden'; AR.on=true; AR.head=null; AR.shown=null;
+  $('ar').hidden=false; document.body.style.overflow='hidden'; AR.on=true; AR.head=null; AR.shown=null; AR.geoErr=null;
+  if(navigator.geolocation&&AR.geoId==null){ try{ AR.geoId=navigator.geolocation.watchPosition(
+      p=>{AR.pos={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy,t:Date.now()};AR.geoErr=null;},
+      e=>{AR.geoErr=e.code;}, {enableHighAccuracy:true,maximumAge:5000,timeout:20000}); }catch(e){AR.geoErr=-1;} }
   try{AR.lock=await navigator.wakeLock.request('screen');}catch(e){}
   setMode(AR.mode);
   setTimeout(()=>{ if(AR.on&&AR.head==null&&!msg.textContent) msg.textContent='讀不到手機方位（電腦或不支援的瀏覽器），箭頭以北方朝上顯示。'; },2500);
@@ -833,6 +837,7 @@ async function setMode(mode){
 function stopCam(){ if(AR.stream){AR.stream.getTracks().forEach(t=>t.stop());AR.stream=null;} $('arVid').srcObject=null; }
 function closeAR(){
   AR.on=false; cancelAnimationFrame(AR.raf); stopCam(); $('ar').hidden=true; document.body.style.overflow='';
+  if(AR.geoId!=null&&navigator.geolocation){navigator.geolocation.clearWatch(AR.geoId);} AR.geoId=null;
   window.removeEventListener('deviceorientationabsolute',onOri); window.removeEventListener('deviceorientation',onOri); window.removeEventListener('compassneedscalibration',calHint);
   try{AR.lock&&AR.lock.release();}catch(e){} AR.lock=null; $('btnAR').focus();
 }
@@ -870,10 +875,16 @@ function loop(){
     c.lineWidth=big?2:1; c.beginPath(); c.moveTo(x,ty+(big?4:12)); c.lineTo(x,ty+20); c.stroke();
     if(big) c.fillText(NAMES[dd],x,ty-6); else if(dd%15===0){c.font='11px '+getComputedStyle(document.body).fontFamily;c.fillText(dd,x,ty-6);c.font='600 13px '+getComputedStyle(document.body).fontFamily;}
   }
-  // 地平線上的目標標記：風從哪裡來、海流往哪裡去
+  // 目的地：依手機 GPS 位置計算龜山島與母港的方位、距離
+  const org=AR.pos||LOCS[0], dests=[];
+  [['龜山島',ISLAND,'#FFB547',0.4],['石城漁港',LOCS[0],'#C9A7FF',0.15]].forEach(([n,pt,col,near])=>{
+    const km=hav(org,pt); if(n!=='龜山島'&&(!AR.pos||km<near)) return;
+    dests.push({n,col,km,b:km<0.05?null:brg(org,pt),near:km<near});});
+  // 地平線上的目標標記：風從哪裡來、海流往哪裡去、龜山島與母港在哪
   const marks=[];
   if(wc&&wc.wind_direction_10m!=null) marks.push([wc.wind_direction_10m,'風從這來','#FFFFFF']);
   if(mc&&mc.ocean_current_direction!=null) marks.push([mc.ocean_current_direction,'流往這去','#4FE3CF']);
+  dests.forEach(d=>{ if(d.b!=null) marks.push([d.b,d.n+' '+(d.km/1.852).toFixed(1)+' 浬',d.col]); });
   marks.forEach(([b,t,col],i)=>{ const r=wrap180(b-hd), off=Math.abs(r)>fov/2-4;
     const x=off?(r<0?26:W-26):W/2+r*pxd, y=ty+44+i*30;
     c.fillStyle=col; c.beginPath(); c.moveTo(x,ty+22); c.lineTo(x-7,ty+32); c.lineTo(x+7,ty+32); c.fill();
@@ -888,6 +899,9 @@ function loop(){
   c.font='600 14px '+getComputedStyle(document.body).fontFamily; c.textAlign='center'; c.textBaseline='middle';
   [[0,'N'],[90,'E'],[180,'S'],[270,'W']].forEach(([b,t])=>{const [x,y]=P(b,1.12); c.fillStyle=b===0?'#FF6B5A':'rgba(255,255,255,.85)'; c.fillText(t,x,y);});
   c.restore();
+  dests.forEach(d=>{ if(d.b==null) return; const [x,y]=P(d.b,1.0); c.save(); c.strokeStyle=d.col; c.lineWidth=2.5; c.setLineDash([6,6]);
+    c.beginPath(); c.moveTo(cx,cy); c.lineTo(x,y); c.stroke(); c.setLineDash([]); c.fillStyle=d.col; c.strokeStyle='rgba(0,0,0,.6)'; c.lineWidth=2;
+    c.beginPath(); c.arc(x,y,7,0,Math.PI*2); c.fill(); c.stroke(); c.restore(); });
   if(wc&&wc.wind_direction_10m!=null){ const to=wc.wind_direction_10m+180, [x1,y1]=P(to+180,0.95), [x2,y2]=P(to,0.95); arrow(c,x1,y1,x2,y2,'#FFFFFF',9); pill(c,x2,y2+(y2<cy?-22:22),'風 '+f(wc.wind_speed_10m,0)+' 節','#FFFFFF'); }
   if(mc&&mc.ocean_current_direction!=null){ const to=mc.ocean_current_direction, [x1,y1]=P(to+180,0.55), [x2,y2]=P(to,0.55); arrow(c,x1,y1,x2,y2,'#4FE3CF',7); pill(c,x2,y2+(y2<cy?-22:22),'流 '+f(mc.ocean_current_velocity/1.852,1)+' 節','#4FE3CF'); }
   c.fillStyle='#FFD45A'; c.beginPath(); c.arc(cx,cy,4,0,Math.PI*2); c.fill();
@@ -895,7 +909,10 @@ function loop(){
   if(!loop.t||performance.now()-loop.t>500){ loop.t=performance.now(); const {li}=arData();
     $('arWind').textContent=wc?`${dirName(wc.wind_direction_10m)} 吹來 · ${f(wc.wind_speed_10m,0)} 節（${beaufort(wc.wind_speed_10m||0).b} 級）`:'—';
     $('arCur').textContent=mc?`流向 ${dirName(mc.ocean_current_direction)} · ${f(mc.ocean_current_velocity/1.852,1)} 節`:'—';
-    $('arMeta').textContent=`手機朝向 ${AR.head==null?'—（北方朝上）':dirName(hd)} · ${LOCS[li].n} · 資料 ${wc?fmtT(tp(wc.time)):'—'}`+(AR.acc!=null&&AR.acc>25?` · 指南針誤差約 ±${Math.round(AR.acc)}°`:'');
+    const isl=dests.find(d=>d.n==='龜山島');
+    $('arIsl').textContent=!isl?'—':isl.near?'你就在龜山島附近':`方位 ${dirName(isl.b)} · ${(isl.km/1.852).toFixed(1)} 浬（${isl.km.toFixed(1)} km）`+(isl.b!=null&&AR.head!=null?` · ${Math.abs(wrap180(isl.b-hd))<8?'就在正前方':wrap180(isl.b-hd)>0?'往右轉 '+Math.round(wrap180(isl.b-hd))+'°':'往左轉 '+Math.round(-wrap180(isl.b-hd))+'°'}`:'');
+    const gps=AR.pos?`GPS ±${Math.round(AR.pos.acc)} m`:AR.geoErr===1?'未允許定位，以石城漁港估算':AR.geoErr!=null?'無法定位，以石城漁港估算':'定位中，暫以石城漁港估算';
+    $('arMeta').textContent=`手機朝向 ${AR.head==null?'—（北方朝上）':dirName(hd)} · ${gps} · 風流數據：${LOCS[li].n} · 資料 ${wc?fmtT(tp(wc.time)):'—'}`+(AR.acc!=null&&AR.acc>25?` · 指南針誤差約 ±${Math.round(AR.acc)}°`:'');
   }
 }
 $('btnAR').onclick=openAR; $('arClose').onclick=closeAR;
